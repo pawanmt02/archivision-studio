@@ -1,229 +1,207 @@
+"""Generate the Archivision Colab notebook — original working version."""
 import json
 
-cells = [
-    {
+CELL4_CODE = '''\
+# Cell 4 — Load models + Start server (~3-5 min first time)
+import os, time, base64, io, threading
+import torch
+from PIL import Image
+import uvicorn
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from pyngrok import ngrok
+from diffusers import (
+    StableDiffusionPipeline,
+    StableDiffusionControlNetPipeline,
+    ControlNetModel,
+    UniPCMultistepScheduler,
+)
+
+PORT   = 8787
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+DTYPE  = torch.float16 if DEVICE == 'cuda' else torch.float32
+print(f'Device: {DEVICE} | dtype: {DTYPE}')
+
+class SketchRequest(BaseModel):
+    sketch_base64: str
+    positive_prompt: str
+    negative_prompt: str = ''
+    seed: int = -1
+    num_inference_steps: int = 30
+    guidance_scale: float = 7.5
+    controlnet_conditioning_scale: float = 0.8
+
+class TextRequest(BaseModel):
+    positive_prompt: str
+    negative_prompt: str = ''
+    seed: int = -1
+    num_inference_steps: int = 30
+    guidance_scale: float = 7.5
+
+class GenerationResponse(BaseModel):
+    image_base64: str
+    seed_used: int
+    latency_seconds: float
+
+print('[1/3] Loading ControlNet scribble model...')
+controlnet = ControlNetModel.from_pretrained(
+    'lllyasviel/sd-controlnet-scribble',
+    torch_dtype=DTYPE
+)
+
+print('[2/3] Loading ControlNet SD pipeline...')
+cn_pipe = StableDiffusionControlNetPipeline.from_pretrained(
+    'runwayml/stable-diffusion-v1-5',
+    controlnet=controlnet,
+    torch_dtype=DTYPE,
+    safety_checker=None,
+    requires_safety_checker=False
+)
+cn_pipe.scheduler = UniPCMultistepScheduler.from_config(cn_pipe.scheduler.config)
+cn_pipe = cn_pipe.to(DEVICE)
+
+print('[3/3] Loading Text-to-Image pipeline...')
+txt_pipe = StableDiffusionPipeline.from_pretrained(
+    'runwayml/stable-diffusion-v1-5',
+    torch_dtype=DTYPE,
+    safety_checker=None,
+    requires_safety_checker=False
+)
+txt_pipe.scheduler = UniPCMultistepScheduler.from_config(txt_pipe.scheduler.config)
+txt_pipe = txt_pipe.to(DEVICE)
+print('All models loaded!')
+
+def b64_to_img(b64):
+    if ',' in b64: b64 = b64.split(',', 1)[1]
+    return Image.open(io.BytesIO(base64.b64decode(b64))).convert('RGB').resize((512, 512))
+
+def img_to_b64(img):
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    return base64.b64encode(buf.getvalue()).decode()
+
+def get_gen(seed):
+    g = torch.Generator(device=DEVICE)
+    if seed == -1:
+        seed = int(torch.randint(0, 2**32 - 1, (1,)).item())
+    g.manual_seed(seed)
+    return g, seed
+
+app = FastAPI(title='Archivision T4 Engine')
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*'], allow_methods=['*'], allow_headers=['*']
+)
+
+@app.get('/health')
+def health():
+    gpu = torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'
+    return {'status': 'healthy', 'gpu': gpu, 'models_loaded': True}
+
+@app.post('/generate_sketch', response_model=GenerationResponse)
+async def gen_sketch(req: SketchRequest):
+    import asyncio
+    sketch = b64_to_img(req.sketch_base64)
+    gen, seed = get_gen(req.seed)
+    t0 = time.perf_counter()
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, lambda: cn_pipe(
+        prompt=req.positive_prompt,
+        negative_prompt=req.negative_prompt,
+        image=sketch,
+        generator=gen,
+        num_inference_steps=req.num_inference_steps,
+        guidance_scale=req.guidance_scale,
+        controlnet_conditioning_scale=req.controlnet_conditioning_scale,
+        height=512, width=512
+    ))
+    return GenerationResponse(
+        image_base64=img_to_b64(result.images[0]),
+        seed_used=seed,
+        latency_seconds=round(time.perf_counter() - t0, 3)
+    )
+
+@app.post('/generate_text', response_model=GenerationResponse)
+async def gen_text(req: TextRequest):
+    import asyncio
+    gen, seed = get_gen(req.seed)
+    t0 = time.perf_counter()
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, lambda: txt_pipe(
+        prompt=req.positive_prompt,
+        negative_prompt=req.negative_prompt,
+        generator=gen,
+        num_inference_steps=req.num_inference_steps,
+        guidance_scale=req.guidance_scale,
+        height=512, width=512
+    ))
+    return GenerationResponse(
+        image_base64=img_to_b64(result.images[0]),
+        seed_used=seed,
+        latency_seconds=round(time.perf_counter() - t0, 3)
+    )
+
+# ── Start ngrok tunnel
+if NGROK_AUTH_TOKEN:
+    ngrok.set_auth_token(NGROK_AUTH_TOKEN)
+
+tunnel = ngrok.connect(PORT)
+PUBLIC_URL = tunnel.public_url
+
+print()
+print('=' * 55)
+print('  ARCHIVISION T4 ENGINE - ONLINE')
+print(f'  PUBLIC URL: {PUBLIC_URL}')
+print('  COPY this URL into GPU Tunnel box in the app')
+print('=' * 55)
+
+# Start uvicorn server in background thread
+server_thread = threading.Thread(
+    target=uvicorn.run, args=(app,),
+    kwargs={'host': '0.0.0.0', 'port': PORT}, daemon=True
+)
+server_thread.start()
+print(f'Server running on port {PORT}. Keep this cell alive.')
+
+while server_thread.is_alive():
+    time.sleep(30)
+'''
+
+def make_code_cell(cell_id, source_str):
+    lines = source_str.split('\n')
+    source_list = [line + '\n' for line in lines[:-1]] + [lines[-1]]
+    return {
         "cell_type": "code",
-        "metadata": {"id": "cell_install"},
-        "source": [
-            "# Cell 1 — Install packages WITHOUT breaking torch\n",
-            "# Colab already has torch installed — we only add missing packages\n",
-            "import torch\n",
-            "print('Existing torch version:', torch.__version__)\n",
-            "print('CUDA:', torch.cuda.is_available())\n",
-            "\n",
-            "# Install only what Colab doesn't have — do NOT upgrade torch\n",
-            "!pip install -q --no-deps diffusers transformers\n",
-            "!pip install -q pyngrok fastapi 'uvicorn[standard]' python-multipart pillow\n",
-            "!pip install -q tokenizers safetensors huggingface-hub\n",
-            "print('Done! Now: Runtime -> Restart session, then run Cell 2, 3, 4')"
-        ],
-        "outputs": [],
-        "execution_count": None
-    },
-    {
-        "cell_type": "code",
-        "metadata": {"id": "cell_gpu"},
-        "source": [
-            "# Cell 2 — Verify torch + GPU (run AFTER restarting session)\n",
-            "import torch\n",
-            "print('torch version :', torch.__version__)\n",
-            "print('CUDA available:', torch.cuda.is_available())\n",
-            "if torch.cuda.is_available():\n",
-            "    print('GPU :', torch.cuda.get_device_name(0))\n",
-            "    print('VRAM:', round(torch.cuda.get_device_properties(0).total_memory / 1e9, 1), 'GB')\n",
-            "else:\n",
-            "    raise RuntimeError('No GPU! Set T4 GPU: Runtime -> Change runtime type -> T4 GPU')"
-        ],
-        "outputs": [],
-        "execution_count": None
-    },
-    {
-        "cell_type": "code",
-        "metadata": {"id": "cell_token"},
-        "source": [
-            "# Cell 3 — Paste your FREE ngrok token here\n",
-            "# Get it FREE from: https://dashboard.ngrok.com/get-started/your-authtoken\n",
-            "NGROK_AUTH_TOKEN = 'PASTE_YOUR_NGROK_TOKEN_HERE'\n",
-            "if NGROK_AUTH_TOKEN == 'PASTE_YOUR_NGROK_TOKEN_HERE':\n",
-            "    raise ValueError('Replace PASTE_YOUR_NGROK_TOKEN_HERE with your actual ngrok token!')\n",
-            "print('Token ready!')"
-        ],
-        "outputs": [],
-        "execution_count": None
-    },
-    {
-        "cell_type": "code",
-        "metadata": {"id": "cell_server"},
-        "source": [
-            "# Cell 4 — Load models + Start server (~3-5 min first time)\n",
-            "import os, time, base64, io, threading, asyncio\n",
-            "import torch\n",
-            "from PIL import Image\n",
-            "import uvicorn\n",
-            "from fastapi import FastAPI\n",
-            "from fastapi.middleware.cors import CORSMiddleware\n",
-            "from pydantic import BaseModel\n",
-            "from pyngrok import ngrok\n",
-            "from diffusers import (\n",
-            "    StableDiffusionPipeline,\n",
-            "    StableDiffusionControlNetPipeline,\n",
-            "    ControlNetModel,\n",
-            "    UniPCMultistepScheduler,\n",
-            ")\n",
-            "\n",
-            "PORT   = 8787\n",
-            "DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'\n",
-            "DTYPE  = torch.float16 if DEVICE == 'cuda' else torch.float32\n",
-            "print(f'Device: {DEVICE} | dtype: {DTYPE}')\n",
-            "\n",
-            "# ── Pydantic request/response models\n",
-            "class SketchRequest(BaseModel):\n",
-            "    sketch_base64: str\n",
-            "    positive_prompt: str\n",
-            "    negative_prompt: str = ''\n",
-            "    seed: int = -1\n",
-            "    num_inference_steps: int = 30\n",
-            "    guidance_scale: float = 7.5\n",
-            "    controlnet_conditioning_scale: float = 0.8\n",
-            "\n",
-            "class TextRequest(BaseModel):\n",
-            "    positive_prompt: str\n",
-            "    negative_prompt: str = ''\n",
-            "    seed: int = -1\n",
-            "    num_inference_steps: int = 30\n",
-            "    guidance_scale: float = 7.5\n",
-            "\n",
-            "class GenerationResponse(BaseModel):\n",
-            "    image_base64: str\n",
-            "    seed_used: int\n",
-            "    latency_seconds: float\n",
-            "\n",
-            "# ── Load models into GPU\n",
-            "print('[1/3] Loading ControlNet scribble model...')\n",
-            "controlnet = ControlNetModel.from_pretrained(\n",
-            "    'lllyasviel/sd-controlnet-scribble',\n",
-            "    torch_dtype=DTYPE\n",
-            ")\n",
-            "\n",
-            "print('[2/3] Loading ControlNet SD pipeline...')\n",
-            "cn_pipe = StableDiffusionControlNetPipeline.from_pretrained(\n",
-            "    'runwayml/stable-diffusion-v1-5',\n",
-            "    controlnet=controlnet,\n",
-            "    torch_dtype=DTYPE,\n",
-            "    safety_checker=None,\n",
-            "    requires_safety_checker=False\n",
-            ")\n",
-            "cn_pipe.scheduler = UniPCMultistepScheduler.from_config(cn_pipe.scheduler.config)\n",
-            "cn_pipe = cn_pipe.to(DEVICE)\n",
-            "\n",
-            "print('[3/3] Loading Text-to-Image pipeline...')\n",
-            "txt_pipe = StableDiffusionPipeline.from_pretrained(\n",
-            "    'runwayml/stable-diffusion-v1-5',\n",
-            "    torch_dtype=DTYPE,\n",
-            "    safety_checker=None,\n",
-            "    requires_safety_checker=False\n",
-            ")\n",
-            "txt_pipe.scheduler = UniPCMultistepScheduler.from_config(txt_pipe.scheduler.config)\n",
-            "txt_pipe = txt_pipe.to(DEVICE)\n",
-            "print('All models loaded!')\n",
-            "\n",
-            "# ── Helper functions\n",
-            "def b64_to_img(b64):\n",
-            "    if ',' in b64: b64 = b64.split(',', 1)[1]\n",
-            "    return Image.open(io.BytesIO(base64.b64decode(b64))).convert('RGB').resize((512, 512))\n",
-            "\n",
-            "def img_to_b64(img):\n",
-            "    buf = io.BytesIO()\n",
-            "    img.save(buf, format='PNG')\n",
-            "    return base64.b64encode(buf.getvalue()).decode()\n",
-            "\n",
-            "def get_gen(seed):\n",
-            "    g = torch.Generator(device=DEVICE)\n",
-            "    if seed == -1:\n",
-            "        seed = int(torch.randint(0, 2**32 - 1, (1,)).item())\n",
-            "    g.manual_seed(seed)\n",
-            "    return g, seed\n",
-            "\n",
-            "# ── FastAPI app\n",
-            "app = FastAPI(title='Archivision T4 Engine')\n",
-            "app.add_middleware(\n",
-            "    CORSMiddleware,\n",
-            "    allow_origins=['*'], allow_methods=['*'], allow_headers=['*']\n",
-            ")\n",
-            "\n",
-            "@app.get('/health')\n",
-            "def health():\n",
-            "    gpu = torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'\n",
-            "    return {'status': 'healthy', 'gpu': gpu, 'models_loaded': True}\n",
-            "\n",
-            "@app.post('/generate_sketch', response_model=GenerationResponse)\n",
-            "async def gen_sketch(req: SketchRequest):\n",
-            "    sketch = b64_to_img(req.sketch_base64)\n",
-            "    gen, seed = get_gen(req.seed)\n",
-            "    t0 = time.perf_counter()\n",
-            "    loop = asyncio.get_event_loop()\n",
-            "    result = await loop.run_in_executor(None, lambda: cn_pipe(\n",
-            "        prompt=req.positive_prompt,\n",
-            "        negative_prompt=req.negative_prompt,\n",
-            "        image=sketch,\n",
-            "        generator=gen,\n",
-            "        num_inference_steps=req.num_inference_steps,\n",
-            "        guidance_scale=req.guidance_scale,\n",
-            "        controlnet_conditioning_scale=req.controlnet_conditioning_scale,\n",
-            "        height=512, width=512\n",
-            "    ))\n",
-            "    return GenerationResponse(\n",
-            "        image_base64=img_to_b64(result.images[0]),\n",
-            "        seed_used=seed,\n",
-            "        latency_seconds=round(time.perf_counter() - t0, 3)\n",
-            "    )\n",
-            "\n",
-            "@app.post('/generate_text', response_model=GenerationResponse)\n",
-            "async def gen_text(req: TextRequest):\n",
-            "    gen, seed = get_gen(req.seed)\n",
-            "    t0 = time.perf_counter()\n",
-            "    loop = asyncio.get_event_loop()\n",
-            "    result = await loop.run_in_executor(None, lambda: txt_pipe(\n",
-            "        prompt=req.positive_prompt,\n",
-            "        negative_prompt=req.negative_prompt,\n",
-            "        generator=gen,\n",
-            "        num_inference_steps=req.num_inference_steps,\n",
-            "        guidance_scale=req.guidance_scale,\n",
-            "        height=512, width=512\n",
-            "    ))\n",
-            "    return GenerationResponse(\n",
-            "        image_base64=img_to_b64(result.images[0]),\n",
-            "        seed_used=seed,\n",
-            "        latency_seconds=round(time.perf_counter() - t0, 3)\n",
-            "    )\n",
-            "\n",
-            "# ── Start ngrok tunnel\n",
-            "ngrok.set_auth_token(NGROK_AUTH_TOKEN)\n",
-            "tunnel = ngrok.connect(PORT)\n",
-            "PUBLIC_URL = tunnel.public_url\n",
-            "print()\n",
-            "print('=' * 55)\n",
-            "print('  ARCHIVISION T4 ENGINE - ONLINE')\n",
-            "print(f'  PUBLIC URL: {PUBLIC_URL}')\n",
-            "print('  COPY this URL into GPU Tunnel box in the app')\n",
-            "print('=' * 55)\n",
-            "\n",
-            "# ── Start uvicorn in background thread\n",
-            "server_thread = threading.Thread(\n",
-            "    target=uvicorn.run,\n",
-            "    args=(app,),\n",
-            "    kwargs={'host': '0.0.0.0', 'port': PORT},\n",
-            "    daemon=True\n",
-            ")\n",
-            "server_thread.start()\n",
-            "print(f'Server running on port {PORT}. Keep this cell alive.')\n",
-            "\n",
-            "while server_thread.is_alive():\n",
-            "    time.sleep(30)"
-        ],
+        "metadata": {"id": cell_id},
+        "source": source_list,
         "outputs": [],
         "execution_count": None
     }
+
+cells = [
+    make_code_cell("cell_install", """\
+# Cell 1 — Install dependencies
+!pip install -q diffusers transformers accelerate controlnet_aux pyngrok fastapi "uvicorn[standard]" torch torchvision pillow python-multipart
+print('✅ Dependencies installed! Now: Runtime -> Restart session, then run Cell 2, 3, 4')\
+"""),
+    make_code_cell("cell_gpu", """\
+# Cell 2 — Verify GPU
+import torch
+print('PyTorch version :', torch.__version__)
+print('CUDA Available  :', torch.cuda.is_available())
+if torch.cuda.is_available():
+    print('GPU Device      :', torch.cuda.get_device_name(0))
+    print('VRAM            :', round(torch.cuda.get_device_properties(0).total_memory / 1024**3, 1), 'GB')
+else:
+    raise RuntimeError('No GPU detected! Set Runtime -> Change runtime type -> T4 GPU')\
+"""),
+    make_code_cell("cell_token", """\
+# Cell 3 — Set ngrok auth token
+NGROK_AUTH_TOKEN = "PASTE_YOUR_NGROK_TOKEN_HERE"
+print('Auth token set!')\
+"""),
+    make_code_cell("cell_server", CELL4_CODE.strip()),
 ]
 
 notebook = {
@@ -243,4 +221,3 @@ with open(output_path, "w", encoding="utf-8") as f:
     json.dump(notebook, f, indent=2)
 
 print(f"Written: {output_path}")
-print("Key fix: --no-deps on diffusers/transformers to NOT break Colab's existing torch")

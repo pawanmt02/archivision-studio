@@ -34,15 +34,13 @@ def numpy_to_base64(img: np.ndarray, format='PNG') -> str:
 
 def preprocess_sketch(b64_sketch: str) -> tuple[np.ndarray, str]:
     """
-    Full CV preprocessing pipeline:
+    Full CV preprocessing pipeline for MAXIMUM sketch accuracy:
     1. Decode base64 to numpy BGR
     2. Resize to exactly 512x512
     3. Convert to grayscale
-    4. Apply Gaussian blur (3,3) to reduce noise
-    5. Apply Otsu binarization threshold
-    6. Apply morphological dilation with 3x3 kernel (iterations=2) to close broken lines
-    7. Invert to white-lines-on-black (ControlNet scribble format)
-    8. Convert back to BGR 3-channel for compatibility
+    4. Strict Thresholding (captures every single drawn line, even faint ones)
+    5. Minimal dilation to solidify lines for ControlNet without losing detail
+    6. Convert back to BGR 3-channel for compatibility
     Returns: (processed_numpy_array_BGR, base64_string_of_processed_image)
     """
     img = base64_to_numpy(b64_sketch)
@@ -53,29 +51,26 @@ def preprocess_sketch(b64_sketch: str) -> tuple[np.ndarray, str]:
     # 3. Convert to grayscale
     gray = cv2.cvtColor(img_resized, cv2.COLOR_BGR2GRAY)
     
-    # 4. Gaussian blur
-    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+    # 4. Strict sensitivity threshold:
+    # Our canvas is pure white (255). We want to catch ANY pixel that was drawn on (anything < 250).
+    # THRESH_BINARY_INV turns the white background black (0) and the drawn lines white (255)
+    _, inverted = cv2.threshold(gray, 250, 255, cv2.THRESH_BINARY_INV)
     
-    # 5. Otsu binarization
-    _, binary = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # 5. Minimal dilation: just enough to ensure the AI detects the line, but thin enough to keep exact detail.
+    kernel = np.ones((2, 2), np.uint8)
+    dilated = cv2.dilate(inverted, kernel, iterations=1)
     
-    # 6. Morphological dilation (actually erosion of white text, or dilation of black lines)
-    # Assuming black lines on white background currently:
-    # First invert to make lines white on black
-    inverted = cv2.bitwise_not(binary)
+    # 5.5 ARCHITECTURAL VALIDATION (Forgiving Hough Transform)
+    # Hand-drawn sketches on a web canvas are naturally wavy and jagged.
+    # We use a forgiving Hough Transform to verify there is SOME geometric intent (walls, roofs).
+    # If the user draws at least 3 somewhat straight lines, we accept it as architecture.
+    lines = cv2.HoughLinesP(dilated, 1, np.pi / 180, threshold=25, minLineLength=25, maxLineGap=15)
     
-    # Now dilate the white lines
-    kernel = np.ones((3, 3), np.uint8)
-    dilated = cv2.dilate(inverted, kernel, iterations=2)
-    
-    # 7. Invert to white-lines-on-black (it's already white lines on black from previous step)
-    # If the user drew white lines on black canvas, inverted might be black lines on white. 
-    # To be safe, we check the background color (edges usually have more background).
-    # Since ControlNet needs white lines on black, we ensure mostly black background.
-    if np.mean(dilated) > 127:
-        dilated = cv2.bitwise_not(dilated)
+    if lines is None or len(lines) < 3:
+        raise ValueError("Non-Architectural Sketch Detected: Architecture requires geometric intent. Please ensure your drawing has distinct straight lines (e.g., walls, floors, or a roof).")
+
         
-    # 8. Convert back to BGR 3-channel
+    # 6. Convert back to BGR 3-channel
     final_bgr = cv2.cvtColor(dilated, cv2.COLOR_GRAY2BGR)
     
     b64_out = numpy_to_base64(final_bgr)

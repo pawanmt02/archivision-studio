@@ -1,35 +1,35 @@
 STYLE_PRESETS = {
     'Photorealistic': {
-        'positive_suffix': '8k architectural photograph, photorealistic render, award winning, architectural digest, professional lighting, sharp focus, high detail, unreal engine 5, octane render',
-        'negative': 'blurry, deformed, low quality, warped walls, broken geometry, cartoon, anime, painting, sketch, watermark, ugly, distorted, bad proportions, text, logo'
+        'positive_suffix': '8k architectural photograph of a real building, photorealistic render, award winning architecture, architectural digest magazine cover, professional DSLR photography, sharp focus, high detail, realistic materials, concrete walls, glass windows, wooden doors, tiled roof, real world building, unreal engine 5, octane render, V-Ray render',
+        'negative': 'blurry, deformed, low quality, warped walls, broken geometry, cartoon, anime, painting, sketch, watermark, ugly, distorted, bad proportions, text, logo, abstract, surreal, fantasy, people, faces, animals'
     },
     'Brutalism': {
-        'positive_suffix': 'brutalist architecture, exposed concrete, geometric forms, harsh shadows, monolithic, modernist, architectural photograph, 8k render',
-        'negative': 'blurry, deformed, low quality, colorful, decorative, ornate, wood, warm colors, cartoon, sketch'
+        'positive_suffix': 'brutalist architecture building, exposed raw concrete structure, heavy geometric block forms, harsh dramatic shadows, monolithic concrete walls, modernist building exterior, real world brutalist building photograph, 8k architectural render',
+        'negative': 'blurry, deformed, low quality, colorful, decorative, ornate, wood, warm colors, cartoon, sketch, abstract, fantasy, people, faces, animals'
     },
     'Minimalist': {
-        'positive_suffix': 'minimalist interior design, clean lines, white walls, natural light, Scandinavian design, simple geometry, architectural digest, 8k render',
-        'negative': 'blurry, deformed, clutter, busy, decorative, ornate, cartoon, sketch, dark'
+        'positive_suffix': 'minimalist house interior design, clean straight lines, white plastered walls, polished concrete floor, natural light through large windows, Scandinavian house design, simple geometric rooms, real house interior, architectural digest, 8k render',
+        'negative': 'blurry, deformed, clutter, busy, decorative, ornate, cartoon, sketch, dark, abstract, fantasy, people, faces, animals'
     },
     'Biophilic': {
-        'positive_suffix': 'biophilic design, living walls, natural materials, plants, wood, stone, organic forms, natural light, sustainable architecture, 8k render',
-        'negative': 'blurry, deformed, synthetic, industrial, concrete only, plastic, cartoon, sketch'
+        'positive_suffix': 'biophilic house design, living green walls on building facade, natural materials, indoor plants, wooden beams, stone cladding, organic architectural forms, natural light through skylights, sustainable eco-friendly house, real building photograph, 8k render',
+        'negative': 'blurry, deformed, synthetic, plastic, cartoon, sketch, abstract, fantasy, people, faces, animals'
     },
     'Industrial': {
-        'positive_suffix': 'industrial loft interior, exposed pipes, metal beams, brick walls, Edison bulbs, dark aesthetic, warehouse conversion, architectural photograph, 8k render',
-        'negative': 'blurry, deformed, clean white, minimalist, cartoon, sketch, low quality'
+        'positive_suffix': 'industrial loft house interior, exposed steel pipes and ductwork, metal I-beams, red brick walls, Edison bulb lighting, polished concrete floor, warehouse conversion into living space, real building interior photograph, 8k architectural render',
+        'negative': 'blurry, deformed, clean white, cartoon, sketch, low quality, abstract, fantasy, people, faces, animals'
     },
     'Art Deco': {
-        'positive_suffix': 'art deco interior, geometric patterns, gold accents, luxury, symmetrical design, 1920s glamour, ornate, architectural digest, 8k render',
-        'negative': 'blurry, deformed, minimalist, brutalist, cartoon, sketch, low quality'
+        'positive_suffix': 'art deco building interior, geometric wall patterns, gold and brass accents, luxury marble flooring, symmetrical architectural design, 1920s glamour hotel lobby, ornate ceiling moldings, real building interior, architectural digest, 8k render',
+        'negative': 'blurry, deformed, minimalist, brutalist, cartoon, sketch, low quality, abstract, fantasy, people, faces, animals'
     },
     'Futuristic': {
-        'positive_suffix': 'futuristic architecture, parametric design, curved surfaces, smart glass, LED strips, sci-fi interior, Zaha Hadid inspired, 8k render, unreal engine 5',
-        'negative': 'blurry, deformed, traditional, rustic, cartoon, sketch, low quality'
+        'positive_suffix': 'futuristic house architecture, parametric facade design, curved glass surfaces, smart glass panels, embedded LED strip lighting, sci-fi inspired building interior, Zaha Hadid inspired real building, white smooth walls, real architectural photograph, 8k render, unreal engine 5',
+        'negative': 'blurry, deformed, traditional, rustic, cartoon, sketch, low quality, abstract, fantasy, people, faces, animals'
     }
 }
 
-SKETCH_MODE_STRUCTURAL_ENFORCER = 'architectural interior, precise geometry, clean structural lines, straight walls, defined floor plan, architectural accuracy'
+SKETCH_MODE_STRUCTURAL_ENFORCER = 'real house architecture, building interior with walls ceiling and floor, precise geometry, clean structural lines, straight walls, defined room layout, architectural blueprint accuracy, real world construction, doors and windows, building structure'
 
 def build_sketch_prompt(user_prompt: str, style_preset: str) -> tuple[str, str]:
     """Returns (full_positive_prompt, full_negative_prompt) for sketch mode"""

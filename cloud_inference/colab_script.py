@@ -213,6 +213,14 @@ app.add_middleware(
 # Endpoints
 # ─────────────────────────────────────────────────────────────
 
+@app.get("/", tags=["Status"])
+async def root():
+    """Root endpoint for status check."""
+    return {
+        "status": "online",
+        "message": "Archivision T4 Engine is running! Paste this URL into Archivision Studio settings."
+    }
+
 @app.get("/health", response_model=HealthResponse, tags=["Status"])
 async def health() -> HealthResponse:
     """Return GPU info and model load status."""

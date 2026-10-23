@@ -30,7 +30,7 @@ class SketchRequest(BaseModel):
     seed: int = -1
     num_inference_steps: int = 30
     guidance_scale: float = 7.5
-    controlnet_conditioning_scale: float = 0.8
+    controlnet_conditioning_scale: float = 1.0
 
 class TextRequest(BaseModel):
     positive_prompt: str
@@ -50,9 +50,9 @@ controlnet = ControlNetModel.from_pretrained(
     torch_dtype=DTYPE
 )
 
-print('[2/3] Loading ControlNet SD pipeline...')
+print('[2/3] Loading ControlNet SD pipeline (Realistic Vision V5.1)...')
 cn_pipe = StableDiffusionControlNetPipeline.from_pretrained(
-    'runwayml/stable-diffusion-v1-5',
+    'SG161222/Realistic_Vision_V5.1_noVAE',
     controlnet=controlnet,
     torch_dtype=DTYPE,
     safety_checker=None,
@@ -61,9 +61,9 @@ cn_pipe = StableDiffusionControlNetPipeline.from_pretrained(
 cn_pipe.scheduler = UniPCMultistepScheduler.from_config(cn_pipe.scheduler.config)
 cn_pipe = cn_pipe.to(DEVICE)
 
-print('[3/3] Loading Text-to-Image pipeline...')
+print('[3/3] Loading Text-to-Image pipeline (Realistic Vision V5.1)...')
 txt_pipe = StableDiffusionPipeline.from_pretrained(
-    'runwayml/stable-diffusion-v1-5',
+    'SG161222/Realistic_Vision_V5.1_noVAE',
     torch_dtype=DTYPE,
     safety_checker=None,
     requires_safety_checker=False
@@ -93,6 +93,10 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=['*'], allow_methods=['*'], allow_headers=['*']
 )
+
+@app.get('/')
+def root():
+    return {'status': 'online', 'message': 'Archivision T4 Engine is running! Paste this URL in Archivision Studio settings.'}
 
 @app.get('/health')
 def health():

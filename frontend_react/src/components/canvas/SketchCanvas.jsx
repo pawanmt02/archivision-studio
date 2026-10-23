@@ -129,6 +129,22 @@ const SketchCanvas = forwardRef(({ width = 512, height = 512 }, ref) => {
     },
     exportCanvas: () => {
       return canvasRef.current.toDataURL('image/png');
+    },
+    getStrokeCount: () => {
+      return history.length - 1;
+    },
+    getComplexityScore: () => {
+      const ctx = canvasRef.current.getContext('2d');
+      const imgData = ctx.getImageData(0, 0, width, height).data;
+      let drawnPixels = 0;
+      // imgData is a flat array of RGBA values [r,g,b,a, r,g,b,a, ...]
+      for (let i = 0; i < imgData.length; i += 4) {
+        // If a pixel is not completely white (e.g., r, g, or b is < 250)
+        if (imgData[i] < 250 || imgData[i+1] < 250 || imgData[i+2] < 250) {
+          drawnPixels++;
+        }
+      }
+      return drawnPixels;
     }
   }));
 

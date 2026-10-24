@@ -40,12 +40,12 @@ const StudioWorkspace = () => {
 
   // Settings
   const [selectedStyle, setSelectedStyle]   = useState('Photorealistic');
-  const [positivePrompt, setPositivePrompt] = useState('A beautiful modern house interior with clean walls, polished floor, natural daylight, elegant furniture, professional architecture');
-  const [negativePrompt, setNegativePrompt] = useState('blurry, low quality, deformed, cartoon, ugly, distorted walls, broken geometry, abstract, people, text, watermark');
+  const [positivePrompt, setPositivePrompt] = useState('A modern architectural interior, high quality, 8k resolution, photorealistic');
+  const [negativePrompt, setNegativePrompt] = useState('blurry, low quality, deformed, cartoon');
   const [seed, setSeed]                     = useState('');
   const [seedLocked, setSeedLocked]         = useState(false);
-  const [numSteps, setNumSteps]             = useState(35);
-  const [guidanceScale, setGuidanceScale]   = useState(9.0);
+  const [numSteps, setNumSteps]             = useState(30);
+  const [guidanceScale, setGuidanceScale]   = useState(7.5);
 
   // Renders
   const [renders, setRenders]           = useState([]);
@@ -109,6 +109,18 @@ const StudioWorkspace = () => {
     setIsGenerating(true);
     setLoadingMsgIdx(0);
     try {
+      // ── Stage 1: Client-Side Pixel Complexity Filter ──
+      if (mode === 'sketch' && canvasRef.current) {
+        const validation = canvasRef.current.validateSketch();
+        if (!validation.valid) {
+          setError(
+            `Please draw a more detailed architectural sketch. Simple scribbles are not enough for the AI to generate a perfect structure. (Drawn pixels: ${validation.drawnPixels}, minimum required: 2,500)`
+          );
+          setIsGenerating(false);
+          return;
+        }
+      }
+
       const payload = {
         project_id: parseInt(projectId),
         generation_mode: mode,
@@ -118,15 +130,9 @@ const StudioWorkspace = () => {
         seed: seedLocked && seed ? parseInt(seed) : null,
         num_inference_steps: numSteps,
         guidance_scale: guidanceScale,
-        controlnet_conditioning_scale: 1.0,
+        controlnet_conditioning_scale: 0.8,
       };
       if (mode === 'sketch' && canvasRef.current) {
-        const complexity = canvasRef.current.getComplexityScore();
-        if (complexity < 2500) {
-          setError('Please draw a more detailed architectural sketch. Simple scribbles are not enough for the AI to generate a perfect structure.');
-          setIsGenerating(false);
-          return;
-        }
         payload.sketch_b64 = canvasRef.current.exportCanvas();
       }
       const res = await renderApi.generate(payload);

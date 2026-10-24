@@ -130,21 +130,24 @@ const SketchCanvas = forwardRef(({ width = 512, height = 512 }, ref) => {
     exportCanvas: () => {
       return canvasRef.current.toDataURL('image/png');
     },
-    getStrokeCount: () => {
-      return history.length - 1;
-    },
-    getComplexityScore: () => {
-      const ctx = canvasRef.current.getContext('2d');
-      const imgData = ctx.getImageData(0, 0, width, height).data;
+    validateSketch: () => {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+      const MIN_DRAWN_PIXELS = 2500;
+
       let drawnPixels = 0;
-      // imgData is a flat array of RGBA values [r,g,b,a, r,g,b,a, ...]
-      for (let i = 0; i < imgData.length; i += 4) {
-        // If a pixel is not completely white (e.g., r, g, or b is < 250)
-        if (imgData[i] < 250 || imgData[i+1] < 250 || imgData[i+2] < 250) {
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i] < 250 || data[i + 1] < 250 || data[i + 2] < 250) {
           drawnPixels++;
         }
       }
-      return drawnPixels;
+
+      return {
+        valid: drawnPixels >= MIN_DRAWN_PIXELS,
+        drawnPixels,
+      };
     }
   }));
 

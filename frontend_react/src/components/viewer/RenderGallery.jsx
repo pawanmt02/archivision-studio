@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Maximize, X } from 'lucide-react';
+import { Maximize2, ZoomIn } from 'lucide-react';
+import FullscreenModal from './FullscreenModal';
 
 const toDataUrl = (b64) => {
   if (!b64) return null;
@@ -9,50 +10,9 @@ const toDataUrl = (b64) => {
 
 const RenderGallery = ({ renders, onSelect, selectedId }) => {
   const [hovered, setHovered] = useState(null);
-  const [fullscreenImage, setFullscreenImage] = useState(null);
+  const [fullscreenRender, setFullscreenRender] = useState(null);
 
   if (!renders || renders.length === 0) return null;
-
-  const FullscreenModal = () => (
-    <div 
-      onClick={() => setFullscreenImage(null)}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 9999,
-        background: 'rgba(0, 0, 0, 0.9)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        backdropFilter: 'blur(10px)',
-        animation: 'fadeIn 0.2s ease',
-        cursor: 'zoom-out'
-      }}
-    >
-      <div 
-        style={{
-          position: 'absolute', top: 20, right: 20,
-          background: 'rgba(255,255,255,0.1)', padding: 10,
-          borderRadius: '50%', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}
-        onClick={(e) => {
-          e.stopPropagation();
-          setFullscreenImage(null);
-        }}
-      >
-        <X color="white" size={24} />
-      </div>
-      <img
-        src={fullscreenImage}
-        alt="Render Fullscreen"
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          maxWidth: '90vw', maxHeight: '90vh',
-          objectFit: 'contain',
-          borderRadius: 8,
-          boxShadow: '0 0 40px rgba(0,0,0,0.5)',
-          cursor: 'default'
-        }}
-      />
-    </div>
-  );
 
   return (
     <div className="panel-section">
@@ -76,7 +36,6 @@ const RenderGallery = ({ renders, onSelect, selectedId }) => {
                 transform: isHovered ? 'scale(1.04)' : 'scale(1)',
                 transition: 'transform 0.18s ease, box-shadow 0.18s ease',
                 boxShadow: isHovered ? '0 6px 20px rgba(0,0,0,0.4)' : undefined,
-                position: 'relative',
               }}
             >
               {imgSrc ? (
@@ -95,28 +54,42 @@ const RenderGallery = ({ renders, onSelect, selectedId }) => {
                 </div>
               )}
 
-              {/* Hover overlay with Maximize */}
+              {/* Hover overlay with zoom button */}
               {isHovered && (
-                <div style={{
-                  position: 'absolute', inset: 0, borderRadius: 6,
-                  background: 'rgba(0,0,0,0.3)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: 'white', fontSize: 11, fontWeight: 600, letterSpacing: 0.5,
-                }}>
-                  <div 
+                <div
+                  style={{
+                    position: 'absolute', inset: 0, borderRadius: 6,
+                    background: 'rgba(10, 13, 18, 0.6)',
+                    backdropFilter: 'blur(2px)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    gap: 6, zIndex: 10,
+                  }}
+                >
+                  <button
+                    title="Fullscreen Inspection"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setFullscreenImage(imgSrc);
+                      setFullscreenRender(render);
                     }}
                     style={{
-                      background: 'rgba(0,0,0,0.6)', padding: 6,
-                      borderRadius: '50%', cursor: 'pointer', zIndex: 10,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '4px 8px',
+                      borderRadius: 14,
+                      background: 'rgba(10, 13, 18, 0.85)',
+                      border: '1px solid rgba(99, 198, 210, 0.5)',
+                      color: '#fff',
+                      fontSize: 10,
+                      fontWeight: 600,
+                      letterSpacing: 0.5,
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
                     }}
-                    title="View Fullscreen"
                   >
-                    <Maximize size={16} />
-                  </div>
+                    <Maximize2 size={11} style={{ color: 'var(--accent-teal)' }} />
+                    <span>Zoom</span>
+                  </button>
                 </div>
               )}
 
@@ -134,7 +107,27 @@ const RenderGallery = ({ renders, onSelect, selectedId }) => {
           );
         })}
       </div>
-      {fullscreenImage && <FullscreenModal />}
+
+      {/* Fullscreen Modal with Historical Metadata */}
+      {fullscreenRender && (
+        <FullscreenModal
+          isOpen={!!fullscreenRender}
+          onClose={() => setFullscreenRender(null)}
+          imageSrc={toDataUrl(fullscreenRender.rendered_image_b64 || fullscreenRender.sketch_image_b64)}
+          title={`Historical Render #${fullscreenRender.id} — Architectural Blueprint Inspection`}
+          metadata={{
+            mode: fullscreenRender.generation_mode || fullscreenRender.mode,
+            style: fullscreenRender.prompt_or_style || fullscreenRender.style_preset || 'Architectural',
+            iou: fullscreenRender.edge_similarity_score ?? fullscreenRender.iou_score,
+            seed: fullscreenRender.seed_used ?? fullscreenRender.seed,
+            latency: fullscreenRender.inference_latency_seconds
+              ? `${fullscreenRender.inference_latency_seconds.toFixed(2)}s`
+              : fullscreenRender.created_at
+              ? new Date(fullscreenRender.created_at).toLocaleTimeString()
+              : null,
+          }}
+        />
+      )}
     </div>
   );
 };

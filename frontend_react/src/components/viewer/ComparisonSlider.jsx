@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ChevronsLeftRight, Maximize, X } from 'lucide-react';
+import { ChevronsLeftRight, Maximize2 } from 'lucide-react';
+import FullscreenModal from './FullscreenModal';
 
 // Ensure base64 string has the data URL prefix
 const toDataUrl = (b64) => {
@@ -51,74 +52,27 @@ const ComparisonSlider = ({ sketchB64, renderB64, width = 280, height = 280 }) =
     };
   }, [isDragging]);
 
-  const FullscreenModal = () => (
-    <div 
-      onClick={() => setIsFullscreen(false)}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 9999,
-        background: 'rgba(0, 0, 0, 0.9)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        backdropFilter: 'blur(10px)',
-        animation: 'fadeIn 0.2s ease',
-        cursor: 'zoom-out'
-      }}
-    >
-      <div 
-        style={{
-          position: 'absolute', top: 20, right: 20,
-          background: 'rgba(255,255,255,0.1)', padding: 10,
-          borderRadius: '50%', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}
-        onClick={(e) => {
-          e.stopPropagation();
-          setIsFullscreen(false);
-        }}
-      >
-        <X color="white" size={24} />
-      </div>
-      <img
-        src={renderSrc}
-        alt="Render Fullscreen"
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          maxWidth: '90vw', maxHeight: '90vh',
-          objectFit: 'contain',
-          borderRadius: 8,
-          boxShadow: '0 0 40px rgba(0,0,0,0.5)',
-          cursor: 'default'
-        }}
-      />
-    </div>
-  );
-
   // Text mode — show render with fade-in animation
   if (!sketchSrc && renderSrc) {
     return (
       <>
-        <div style={{
-          width: '100%', borderRadius: 10, overflow: 'hidden',
-          background: 'var(--bg-surface)', position: 'relative',
-        }}>
+        <div
+          onClick={() => setIsFullscreen(true)}
+          title="Click to inspect in fullscreen"
+          style={{
+            width: '100%', borderRadius: 10, overflow: 'hidden',
+            background: 'var(--bg-surface)', position: 'relative',
+            cursor: 'pointer',
+          }}
+        >
           <img
             src={renderSrc}
             alt="Generated render"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setIsFullscreen(true);
-            }}
-            onTouchStart={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setIsFullscreen(true);
-            }}
             style={{
               width: '100%', height: height, objectFit: 'cover', display: 'block',
               opacity: revealed ? 1 : 0,
               transform: revealed ? 'scale(1)' : 'scale(1.04)',
               transition: 'opacity 0.6s ease, transform 0.6s ease',
-              cursor: 'pointer',
             }}
           />
           {/* Shimmer overlay while loading */}
@@ -128,42 +82,51 @@ const ComparisonSlider = ({ sketchB64, renderB64, width = 280, height = 280 }) =
               background: 'linear-gradient(90deg, var(--bg-surface) 25%, rgba(99,198,210,0.08) 50%, var(--bg-surface) 75%)',
               backgroundSize: '200% 100%',
               animation: 'shimmer 1.2s infinite',
-              pointerEvents: 'none',
             }} />
           )}
-          <div 
+
+          {/* Floating Maximize Trigger */}
+          <button
+            title="Expand to Fullscreen"
             onMouseDown={(e) => {
               e.preventDefault();
               e.stopPropagation();
               setIsFullscreen(true);
             }}
-            onTouchStart={(e) => {
+            onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
               setIsFullscreen(true);
             }}
             style={{
-              position: 'absolute', top: 10, right: 10,
-              background: 'rgba(0,0,0,0.5)', padding: 6,
-              borderRadius: '50%', cursor: 'pointer',
+              position: 'absolute', top: 8, right: 8,
+              width: 26, height: 26, borderRadius: 6,
+              background: 'rgba(10, 13, 18, 0.75)',
+              backdropFilter: 'blur(8px)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              color: '#fff',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'white', opacity: revealed ? 1 : 0,
-              transition: 'opacity 0.3s ease',
-              zIndex: 20
+              cursor: 'pointer', zIndex: 15, padding: 0,
             }}
           >
-            <Maximize size={16} />
-          </div>
+            <Maximize2 size={13} />
+          </button>
+
           <div style={{
             position: 'absolute', bottom: 8, right: 10,
             fontSize: 10, fontWeight: 700, letterSpacing: 1,
             padding: '3px 8px', borderRadius: 20,
             background: 'rgba(99,198,210,0.2)', color: 'var(--accent-teal)',
             border: '1px solid rgba(99,198,210,0.3)',
-            pointerEvents: 'none',
           }}>AI RENDER</div>
         </div>
-        {isFullscreen && <FullscreenModal />}
+
+        <FullscreenModal
+          isOpen={isFullscreen}
+          onClose={() => setIsFullscreen(false)}
+          imageSrc={renderSrc}
+          title="AI Generated Architectural Render"
+        />
       </>
     );
   }
@@ -228,38 +191,48 @@ const ComparisonSlider = ({ sketchB64, renderB64, width = 280, height = 280 }) =
           </div>
         </div>
 
-        {/* Fullscreen Button */}
+        {/* Floating Maximize Trigger with pointer-event isolation */}
         {renderSrc && (
-          <div 
+          <button
+            title="Expand to Fullscreen"
             onMouseDown={(e) => {
               e.preventDefault();
               e.stopPropagation();
               setIsFullscreen(true);
             }}
-            onTouchStart={(e) => {
+            onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
               setIsFullscreen(true);
             }}
             style={{
               position: 'absolute', top: 8, right: 8,
-              background: 'rgba(0,0,0,0.6)', padding: 6,
-              borderRadius: '50%', cursor: 'pointer', zIndex: 20,
+              width: 26, height: 26, borderRadius: 6,
+              background: 'rgba(10, 13, 18, 0.75)',
+              backdropFilter: 'blur(8px)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              color: '#fff',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'white'
+              cursor: 'pointer', zIndex: 25, padding: 0,
             }}
           >
-            <Maximize size={14} />
-          </div>
+            <Maximize2 size={13} />
+          </button>
         )}
 
         {/* Labels */}
         <div style={{ position: 'absolute', top: 8, left: 8, fontSize: 9, fontWeight: 700, letterSpacing: 1, color: '#333', background: 'rgba(255,255,255,0.85)', padding: '2px 7px', borderRadius: 20 }}>SKETCH</div>
+        <div style={{ position: 'absolute', top: 8, right: renderSrc ? 38 : 8, fontSize: 9, fontWeight: 700, letterSpacing: 1, color: '#fff', background: 'rgba(0,0,0,0.6)', padding: '2px 7px', borderRadius: 20 }}>RENDER</div>
       </div>
-      {isFullscreen && <FullscreenModal />}
+
+      <FullscreenModal
+        isOpen={isFullscreen}
+        onClose={() => setIsFullscreen(false)}
+        imageSrc={renderSrc}
+        title="Architectural Generative Render — High-Resolution Inspection"
+      />
     </>
   );
 };
 
 export default ComparisonSlider;
-

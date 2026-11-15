@@ -3,9 +3,11 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authApi } from '../api/authApi';
 import { Hexagon } from 'lucide-react';
+import AuthMascot from '../components/common/AuthMascot';
 
 const RegisterPage = () => {
   const [formData, setFormData] = useState({ username: '', email: '', password: '', confirmPassword: '' });
+  const [focusedField, setFocusedField] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -39,25 +41,64 @@ const RegisterPage = () => {
           <Hexagon size={48} />
         </div>
         <h1 className="auth-title">Create Account</h1>
+
+        {/* Interactive Animated Mascot */}
+        <AuthMascot focusedField={focusedField} />
         
         {error && <div className="error-msg">{error}</div>}
         
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div className="input-group">
             <label className="input-label">Username</label>
-            <input type="text" name="username" className="input-field" value={formData.username} onChange={handleChange} required />
+            <input
+              type="text"
+              name="username"
+              className="input-field"
+              value={formData.username}
+              onChange={handleChange}
+              onFocus={() => setFocusedField('username')}
+              onBlur={() => setFocusedField(null)}
+              required
+            />
           </div>
           <div className="input-group">
             <label className="input-label">Email</label>
-            <input type="email" name="email" className="input-field" value={formData.email} onChange={handleChange} required />
+            <input
+              type="email"
+              name="email"
+              className="input-field"
+              value={formData.email}
+              onChange={handleChange}
+              onFocus={() => setFocusedField('email')}
+              onBlur={() => setFocusedField(null)}
+              required
+            />
           </div>
           <div className="input-group">
             <label className="input-label">Password</label>
-            <input type="password" name="password" className="input-field" value={formData.password} onChange={handleChange} required />
+            <input
+              type="password"
+              name="password"
+              className="input-field"
+              value={formData.password}
+              onChange={handleChange}
+              onFocus={() => setFocusedField('password')}
+              onBlur={() => setFocusedField(null)}
+              required
+            />
           </div>
           <div className="input-group">
             <label className="input-label">Confirm Password</label>
-            <input type="password" name="confirmPassword" className="input-field" value={formData.confirmPassword} onChange={handleChange} required />
+            <input
+              type="password"
+              name="confirmPassword"
+              className="input-field"
+              value={formData.confirmPassword}
+              onChange={handleChange}
+              onFocus={() => setFocusedField('confirmPassword')}
+              onBlur={() => setFocusedField(null)}
+              required
+            />
           </div>
           <button type="submit" className="btn-primary" disabled={loading} style={{ width: '100%', padding: '12px' }}>
             {loading ? 'Registering...' : 'Register'}

@@ -13,3 +13,4 @@ pillow
 httpx
 aiofiles
 python-dotenv
+reportlab

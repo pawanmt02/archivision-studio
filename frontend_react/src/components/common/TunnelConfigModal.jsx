@@ -1,14 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { X, ExternalLink } from 'lucide-react';
+import { X } from 'lucide-react';
 
 const TunnelConfigModal = ({ isOpen, onClose, currentUrl, onSave, status }) => {
   const [url, setUrl] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     setUrl(currentUrl || '');
   }, [currentUrl, isOpen]);
 
   if (!isOpen) return null;
+
+  const isConnected = Boolean(
+    status?.connected === true ||
+    status?.status === 'active' ||
+    status?.status === 'healthy'
+  );
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await onSave(url);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <div className="modal-overlay">
@@ -36,15 +52,19 @@ const TunnelConfigModal = ({ isOpen, onClose, currentUrl, onSave, status }) => {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '20px 0' }}>
           <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Status:</span>
-          <div className={`status-indicator`} style={{ padding: '2px 8px' }}>
-            <div className={`status-dot ${status?.status === 'active' ? 'connected' : 'disconnected'}`}></div>
-            {status?.status === 'active' ? 'Connected' : 'Disconnected'}
+          <div className="status-indicator" style={{ padding: '2px 8px' }}>
+            <div className={`status-dot ${isConnected ? 'connected' : 'disconnected'}`}></div>
+            <span style={{ color: isConnected ? '#4ade80' : 'var(--accent-red)', fontWeight: 600 }}>
+              {isConnected ? 'Connected' : 'Disconnected'}
+            </span>
           </div>
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
           <button className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={() => { onSave(url); }}>Save & Connect</button>
+          <button className="btn-primary" onClick={handleSave} disabled={isSaving}>
+            {isSaving ? 'Connecting...' : 'Save & Connect'}
+          </button>
         </div>
       </div>
     </div>

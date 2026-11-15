@@ -3,11 +3,13 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authApi } from '../api/authApi';
 import { Hexagon, Eye, EyeOff, LogIn } from 'lucide-react';
+import AuthMascot from '../components/common/AuthMascot';
 
 const LoginPage = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
+  const [focusedField, setFocusedField] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -43,6 +45,9 @@ const LoginPage = () => {
         <h1 className="auth-title">ARCHIVISION</h1>
         <p className="auth-subtitle">AI-Powered Architectural Synthesis Studio</p>
 
+        {/* Interactive Animated Mascot */}
+        <AuthMascot focusedField={focusedField} />
+
         {error && (
           <div className="auth-error">
             ⚠️ {error}
@@ -57,6 +62,8 @@ const LoginPage = () => {
               className="input-field"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
+              onFocus={() => setFocusedField('username')}
+              onBlur={() => setFocusedField(null)}
               placeholder="Enter your username"
               required
               autoFocus
@@ -71,6 +78,8 @@ const LoginPage = () => {
                 className="input-field"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onFocus={() => setFocusedField('password')}
+                onBlur={() => setFocusedField(null)}
                 placeholder="Enter your password"
                 required
                 style={{ paddingRight: 44 }}

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import init_db
-from app.routers import auth, workspace, synthesis
+from app.routers import auth, workspace, synthesis, export
 
 app = FastAPI(
     title="Archivision Studio API",
@@ -24,6 +24,7 @@ def on_startup():
 app.include_router(auth.router)
 app.include_router(workspace.router)
 app.include_router(synthesis.router)
+app.include_router(export.router)
 
 @app.get("/")
 def root():

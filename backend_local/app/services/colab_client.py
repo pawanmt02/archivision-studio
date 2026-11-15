@@ -11,9 +11,10 @@ from app.services.cv_preprocessor import base64_to_numpy, numpy_to_base64
 
 async def _post_to_tunnel(endpoint: str, payload: dict) -> dict:
     url = f"{settings.COLAB_TUNNEL_URL}{endpoint}"
+    headers = {"ngrok-skip-browser-warning": "true", "User-Agent": "ArchivisionStudio/1.0"}
     async with httpx.AsyncClient(timeout=60.0) as client:
         try:
-            response = await client.post(url, json=payload)
+            response = await client.post(url, json=payload, headers=headers)
             response.raise_for_status()
             return response.json()
         except Exception as e:
@@ -118,16 +119,22 @@ async def generate_via_text(positive_prompt: str, negative_prompt: str,
     }
 
 async def check_tunnel_health() -> dict:
-    """Check if tunnel URL is set and healthy. Return {connected: bool, url: str}"""
+    """Check if tunnel URL is set and healthy. Return {connected: bool, url: str, status: str}"""
     if not settings.COLAB_TUNNEL_URL:
-        return {"connected": False, "url": ""}
+        return {"connected": False, "url": "", "status": "disconnected"}
         
     try:
+        headers = {"ngrok-skip-browser-warning": "true", "User-Agent": "ArchivisionStudio/1.0"}
         async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(f"{settings.COLAB_TUNNEL_URL}/health")
-            return {"connected": response.status_code == 200, "url": settings.COLAB_TUNNEL_URL}
+            response = await client.get(f"{settings.COLAB_TUNNEL_URL}/health", headers=headers)
+            is_ok = response.status_code == 200
+            return {
+                "connected": is_ok,
+                "url": settings.COLAB_TUNNEL_URL,
+                "status": "active" if is_ok else "disconnected",
+            }
     except Exception:
-        return {"connected": False, "url": settings.COLAB_TUNNEL_URL}
+        return {"connected": False, "url": settings.COLAB_TUNNEL_URL, "status": "disconnected"}
 
 def update_tunnel_url(new_url: str):
     """Dynamically update the tunnel URL at runtime"""

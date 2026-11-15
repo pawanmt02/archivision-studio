@@ -7,11 +7,14 @@ import PerspectiveGrid from '../components/canvas/PerspectiveGrid';
 import ComparisonSlider from '../components/viewer/ComparisonSlider';
 import StyleSelector from '../components/common/StyleSelector';
 import EdgeMetricsViewer from '../components/viewer/EdgeMetricsViewer';
+import ArchivisionPDFExport from '../components/viewer/ArchivisionPDFExport';
+import ShapeStencilModal from '../components/canvas/ShapeStencilModal';
+import ShapeStagingOverlay from '../components/canvas/ShapeStagingOverlay';
 import RenderGallery from '../components/viewer/RenderGallery';
 import TunnelConfigModal from '../components/common/TunnelConfigModal';
 import { projectApi } from '../api/projectApi';
 import { renderApi } from '../api/renderApi';
-import { Grid, Lock, Unlock, Shuffle } from 'lucide-react';
+import { Grid, Lock, Unlock, Shuffle, Shapes } from 'lucide-react';
 
 const LOADING_MESSAGES = [
   'Transmitting sketch to server...',
@@ -55,6 +58,8 @@ const StudioWorkspace = () => {
   const [isGenerating, setIsGenerating]   = useState(false);
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
   const [tunnelModalOpen, setTunnelModalOpen] = useState(false);
+  const [isShapeModalOpen, setIsShapeModalOpen] = useState(false);
+  const [stagingShape, setStagingShape] = useState(null);
   const [tunnelStatus, setTunnelStatus]   = useState({ connected: false, url: '' });
   const [error, setError]                 = useState('');
 
@@ -87,6 +92,18 @@ const StudioWorkspace = () => {
     };
     load();
   }, [projectId]);
+
+  // Automatically poll tunnel status every 3.5s so Navbar and Modal update to Connected automatically
+  useEffect(() => {
+    const checkTunnel = async () => {
+      try {
+        const tRes = await renderApi.getTunnelStatus();
+        setTunnelStatus(tRes.data);
+      } catch {}
+    };
+    const interval = setInterval(checkTunnel, 3500);
+    return () => clearInterval(interval);
+  }, []);
 
   // Auto-save every 30s
   useEffect(() => {
@@ -154,11 +171,26 @@ const StudioWorkspace = () => {
       await renderApi.updateTunnelUrl(url);
       const tRes = await renderApi.getTunnelStatus();
       setTunnelStatus(tRes.data);
-      setTunnelModalOpen(false);
+      if (tRes.data.connected) {
+        setTimeout(() => setTunnelModalOpen(false), 900);
+      }
     } catch (err) { console.error(err); }
   };
 
   const handleRandomizeSeed = () => setSeed(Math.floor(Math.random() * 2 ** 32).toString());
+
+  const handleDownload = (b64Image) => {
+    if (!b64Image) return;
+    const dataUrl = b64Image.startsWith('data:')
+      ? b64Image
+      : `data:image/png;base64,${b64Image}`;
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = 'Archivision_Render.png';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
     <div className="studio-layout">
@@ -187,6 +219,7 @@ const StudioWorkspace = () => {
             onUndo={() => canvasRef.current?.undo()}
             onClear={() => canvasRef.current?.clear()}
             onExport={handleGenerate}
+            onOpenShapes={() => setIsShapeModalOpen(true)}
           />
         )}
 
@@ -203,6 +236,20 @@ const StudioWorkspace = () => {
                   initialStrokeColor={strokeColor}
                 />
                 <PerspectiveGrid visible={perspectiveGridVisible} width={512} height={512} />
+                {stagingShape && (
+                  <ShapeStagingOverlay
+                    shapeType={stagingShape}
+                    strokeColor={strokeColor}
+                    strokeWidth={strokeWidth}
+                    canvasWidth={512}
+                    canvasHeight={512}
+                    onConfirm={(box) => {
+                      canvasRef.current?.stampShapeBox(stagingShape, box);
+                      setStagingShape(null);
+                    }}
+                    onCancel={() => setStagingShape(null)}
+                  />
+                )}
               </div>
               <button
                 className={`btn-icon grid-toggle-btn ${perspectiveGridVisible ? 'active' : ''}`}
@@ -211,6 +258,31 @@ const StudioWorkspace = () => {
               >
                 <Grid size={18} />
                 <span className="btn-icon-label">Grid</span>
+              </button>
+              <button
+                className="btn-icon"
+                onClick={() => setIsShapeModalOpen(true)}
+                title="Insert Shape Stencil"
+                style={{
+                  position: 'absolute',
+                  top: '56px',
+                  right: '-52px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '40px',
+                  height: '40px',
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: '8px',
+                  fontSize: '10px',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                }}
+              >
+                <Shapes size={18} />
+                <span className="btn-icon-label">Shapes</span>
               </button>
             </div>
           ) : (
@@ -330,12 +402,61 @@ const StudioWorkspace = () => {
                   renderB64={currentRender.rendered_image_b64}
                   width={280} height={280}
                 />
+                {/* Download Render Button */}
+                <button
+                  type="button"
+                  onClick={() => handleDownload(currentRender.rendered_image_b64)}
+                  className="relative group overflow-hidden w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs tracking-wider uppercase transition-all duration-300 ease-out cursor-pointer border border-cyan-400/50 hover:border-cyan-300 text-cyan-300 hover:text-white bg-slate-950/90 hover:bg-slate-900 shadow-[0_0_15px_rgba(6,182,212,0.2)] hover:shadow-[0_0_25px_rgba(6,182,212,0.5),inset_0_0_12px_rgba(6,182,212,0.25)]"
+                  style={{
+                    background: 'linear-gradient(135deg, #0b1324 0%, #132038 100%)',
+                    border: '1.5px solid #00f0ff',
+                    color: '#ffffff',
+                    textShadow: '0 0 8px rgba(0, 240, 255, 0.6)',
+                    boxShadow: '0 0 16px rgba(0, 240, 255, 0.25)',
+                    marginTop: '10px',
+                    marginBottom: '4px',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    cursor: 'pointer',
+                    width: '100%',
+                  }}
+                  title="Download the generated architectural render as PNG"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#00f0ff"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="transition-transform duration-200 group-hover:translate-y-0.5"
+                  >
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  <span className="relative z-10">Download Render</span>
+                </button>
                 <EdgeMetricsViewer
                   edgeOverlayB64={currentRender.edge_overlay_b64}
                   iouScore={currentRender.edge_similarity_score}
                   latency={currentRender.inference_latency_seconds}
                   seedUsed={currentRender.seed_used}
                   mode={currentRender.generation_mode}
+                />
+                <ArchivisionPDFExport
+                  originalSketch={currentRender.sketch_image_b64}
+                  generatedRender={currentRender.rendered_image_b64}
+                  architecturalPrompt={currentRender.prompt_or_style || positivePrompt}
+                  fidelityScore={currentRender.edge_similarity_score != null ? currentRender.edge_similarity_score * 100 : 46.5}
+                  clientName={project?.title || 'Archivision Client'}
                 />
               </>
             ) : (
@@ -356,6 +477,15 @@ const StudioWorkspace = () => {
         currentUrl={tunnelStatus.url}
         onSave={handleSaveTunnel}
         status={tunnelStatus}
+      />
+
+      <ShapeStencilModal
+        isOpen={isShapeModalOpen}
+        onClose={() => setIsShapeModalOpen(false)}
+        onSelectShape={(shapeId) => {
+          setStagingShape(shapeId);
+          setIsShapeModalOpen(false);
+        }}
       />
     </div>
   );

@@ -35,3 +35,4 @@ class TunnelConfig(BaseModel):
 class TunnelStatus(BaseModel):
     connected: bool
     url: str
+    status: Optional[str] = 'disconnected'

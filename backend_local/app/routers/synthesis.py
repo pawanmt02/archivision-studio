@@ -28,6 +28,17 @@ async def generate_render(request: RenderRequest, db: Session = Depends(get_db),
     # 3. Setup seed
     seed = request.seed if request.seed is not None else random.randint(0, 2**32 - 1)
     
+    # Restrict generation to INTERIOR architectural designs ONLY
+    interior_positive_suffix = ", architectural interior, indoor lighting, interior design, realistic room proportions, highly detailed floor plan, enclosed space."
+    exterior_negative_suffix = ", sky, exterior, landscape, outdoors, building facade, clouds, grass, trees, natural sunlight."
+
+    effective_positive_prompt = f"{request.positive_prompt or ''}{interior_positive_suffix}"
+    effective_negative_prompt = (
+        f"{request.negative_prompt}{exterior_negative_suffix}"
+        if request.negative_prompt
+        else exterior_negative_suffix.lstrip(", ")
+    )
+
     cleaned_sketch = None
     edge_overlay = None
     edge_score = None
@@ -43,9 +54,9 @@ async def generate_render(request: RenderRequest, db: Session = Depends(get_db),
                 raise HTTPException(status_code=400, detail=validation["message"])
             
             # Prompts
-            pos, neg = build_sketch_prompt(request.positive_prompt, request.style_preset)
-            if request.negative_prompt:
-                neg = f"{request.negative_prompt}, {neg}"
+            pos, neg = build_sketch_prompt(effective_positive_prompt, request.style_preset)
+            if effective_negative_prompt:
+                neg = f"{effective_negative_prompt}, {neg}"
                 
             # Generate
             result = await generate_via_sketch(
@@ -65,9 +76,9 @@ async def generate_render(request: RenderRequest, db: Session = Depends(get_db),
             
         else:
             # Text mode
-            pos, neg = build_text_prompt(request.positive_prompt, request.style_preset)
-            if request.negative_prompt:
-                neg = f"{request.negative_prompt}, {neg}"
+            pos, neg = build_text_prompt(effective_positive_prompt, request.style_preset)
+            if effective_negative_prompt:
+                neg = f"{effective_negative_prompt}, {neg}"
                 
             result = await generate_via_text(
                 positive_prompt=pos,

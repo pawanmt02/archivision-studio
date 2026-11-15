@@ -3,7 +3,7 @@ Archivision Studio - Cloud Inference Engine
 Deploy this on Google Colab with T4 GPU runtime.
 
 Setup:
-  !pip install diffusers transformers accelerate controlnet_aux pyngrok fastapi uvicorn[standard] torch torchvision pillow python-multipart xformers
+  !pip install diffusers transformers accelerate controlnet_aux pyngrok fastapi uvicorn[standard] torch torchvision torchao pillow python-multipart xformers
   !python colab_script.py
 """
 
@@ -23,7 +23,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from pyngrok import ngrok
+from pyngrok import conf, ngrok
 
 # Diffusers imports
 from diffusers import (
@@ -325,7 +325,7 @@ async def generate_text(req: TextRequest) -> GenerationResponse:
 
 if __name__ == "__main__":
     if NGROK_AUTH_TOKEN:
-        ngrok.set_auth_token(NGROK_AUTH_TOKEN)
+        conf.get_default().auth_token = NGROK_AUTH_TOKEN
     else:
         print("⚠️  No NGROK_AUTH_TOKEN set. Running locally only.")
 

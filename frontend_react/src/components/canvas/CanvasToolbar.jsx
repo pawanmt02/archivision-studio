@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pencil, Minus, Square, Eraser, RotateCcw, Trash2, Wand2 } from 'lucide-react';
+import { Pencil, Minus, Square, Eraser, RotateCcw, Trash2, Wand2, Shapes } from 'lucide-react';
 
 const tools = [
   { id: 'draw',   icon: <Pencil size={18} />,  label: 'Draw' },
@@ -8,7 +8,7 @@ const tools = [
   { id: 'eraser', icon: <Eraser size={18} />,  label: 'Erase' },
 ];
 
-const CanvasToolbar = ({ tool, setTool, strokeWidth, setStrokeWidth, strokeColor, setStrokeColor, onUndo, onClear, onExport }) => {
+const CanvasToolbar = ({ tool, setTool, strokeWidth, setStrokeWidth, strokeColor, setStrokeColor, onUndo, onClear, onExport, onOpenShapes }) => {
   return (
     <div className="studio-sidebar">
       {/* Draw tools */}
@@ -24,6 +24,16 @@ const CanvasToolbar = ({ tool, setTool, strokeWidth, setStrokeWidth, strokeColor
             <span className="tool-label">{t.label}</span>
           </button>
         ))}
+        {onOpenShapes && (
+          <button
+            className="sidebar-tool-btn"
+            onClick={onOpenShapes}
+            title="Architectural Shape Stencils"
+          >
+            <Shapes size={18} />
+            <span className="tool-label">Shapes</span>
+          </button>
+        )}
       </div>
 
       <div className="sidebar-divider" />

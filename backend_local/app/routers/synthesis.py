@@ -102,8 +102,16 @@ async def generate_render(request: RenderRequest, db: Session = Depends(get_db),
         
         return new_render
         
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        err_msg = str(e)
+        if any(term in err_msg.lower() for term in ["tunnel", "connecterror", "timeout", "httpx", "remote end hung up"]):
+            raise HTTPException(
+                status_code=500,
+                detail=f"[SERVER_CONNECTION] Remote GPU worker tunnel unreachable: {err_msg}"
+            )
+        raise HTTPException(status_code=500, detail=err_msg)
 
 @router.get("/tunnel-status", response_model=TunnelStatus)
 async def get_tunnel_status():

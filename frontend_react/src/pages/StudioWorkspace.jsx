@@ -33,31 +33,31 @@ const toDataUrl = (b64) => {
 
 // ── Sketch Validation Diagnostic & Solution Engine ──
 const getSketchDiagnosis = (errorMsg) => {
-  const msg = (errorMsg || '').toLowerCase();
+  const rawMsg = errorMsg || '';
+  const msg = rawMsg.toLowerCase();
 
-  // Case A: Low Pixel Count / Too Simple
+  // Mistake 1: [BLANK_CANVAS]
   if (
-    msg.includes('drawn pixels') ||
-    msg.includes('minimum required') ||
-    msg.includes('pixels') ||
-    msg.includes('2,500') ||
-    msg.includes('2500')
+    rawMsg.includes('[BLANK_CANVAS]') ||
+    msg.includes('blank canvas') ||
+    msg.includes('nearly empty') ||
+    msg.includes('no architectural lines were detected')
   ) {
     return {
-      title: 'Low Pixel Count',
-      problem: 'Your drawing has too few strokes/lines to form a recognizable architectural structure.',
+      title: 'EMPTY CANVAS',
+      problem: 'You clicked Generate before sketching any walls or layout on the canvas.',
       solutions: [
         {
-          step: 'Draw Complete Room Boundaries',
-          desc: 'Sketch closed rectangular walls (at least 4 connected lines) spanning a wider area of the canvas.',
-        },
-        {
-          step: 'Add Interior Architectural Details',
-          desc: 'Include doors, windows, partitions, or furniture outlines to cross the 2,500-pixel detail threshold.',
+          step: 'Draft Outer Walls',
+          desc: 'Select RECT or LINE on the left rail to draft outer walls.',
         },
         {
           step: 'Use Architectural Stencils',
-          desc: 'Click the Shapes / Stencils tool and stamp pre-built Rectangle, Door, Window, or Arch primitives onto the canvas.',
+          desc: 'Or click SHAPES to drop a pre-built architectural template.',
+        },
+        {
+          step: 'Verify Stroke Color',
+          desc: 'Ensure your stroke color is visible (black) against the white canvas.',
         },
       ],
       quickAction: {
@@ -67,15 +67,31 @@ const getSketchDiagnosis = (errorMsg) => {
     };
   }
 
-  // Case B: Small Bounding Footprint
-  if (msg.includes('footprint') || msg.includes('small') || msg.includes('bounds')) {
+  // Mistake 2: [LOW_DENSITY]
+  if (
+    rawMsg.includes('[LOW_DENSITY]') ||
+    msg.includes('lacks sufficient architectural detail') ||
+    (msg.includes('drawn pixels') && !msg.includes('footprint') && !msg.includes('horizontal') && !msg.includes('enclosed'))
+  ) {
+    const pixelMatch = rawMsg.match(/drawn pixels:\s*([\d,]+)/i);
+    const drawn = pixelMatch ? parseInt(pixelMatch[1].replace(/,/g, ''), 10) : 0;
+    const deficit = Math.max(0, 2500 - drawn);
+
     return {
-      title: 'Small Bounding Footprint',
-      problem: 'Your sketch is too small or concentrated in one corner of the canvas.',
+      title: drawn > 0 ? `LOW STROKE DETAIL (${drawn.toLocaleString()} / 2,500 PX)` : 'LOW STROKE DETAIL',
+      problem: `Your outer shape is started, but it needs ${deficit > 0 ? deficit.toLocaleString() : 'more'} more pixels of interior structural detail so the AI doesn't hallucinate random furniture.`,
       solutions: [
         {
-          step: 'Scale Up Layout',
-          desc: 'Draw your layout larger so it spans at least 35–40% of the canvas width and height.',
+          step: 'Add Interior Partition Walls',
+          desc: 'Add interior partition walls, doorways, or window frames inside your layout.',
+        },
+        {
+          step: 'Increase Brush Thickness',
+          desc: 'Increase brush thickness slightly (4px–6px) for primary load-bearing walls.',
+        },
+        {
+          step: 'Stamp Architectural Stencils',
+          desc: 'Stamp Door, Window, or Staircase stencils from SHAPES.',
         },
       ],
       quickAction: {
@@ -85,15 +101,70 @@ const getSketchDiagnosis = (errorMsg) => {
     };
   }
 
-  // Case C: Non-Orthogonal / Slanted Lines
-  if (msg.includes('orthogonal') || msg.includes('horizontal') || msg.includes('vertical')) {
+  // Mistake 3: [SMALL_FOOTPRINT]
+  if (
+    rawMsg.includes('[SMALL_FOOTPRINT]') ||
+    msg.includes('footprint is too small') ||
+    msg.includes('spatial footprint too small') ||
+    msg.includes('footprint')
+  ) {
+    const dimMatch = rawMsg.match(/(\d+)\s*[×x]\s*(\d+)\s*px/i);
+    const w = dimMatch ? dimMatch[1] : '';
+    const h = dimMatch ? dimMatch[2] : '';
+    const dimStr = w && h ? `${w}×${h} px` : '< 160×160 px';
+
     return {
-      title: 'Non-Orthogonal / Slanted Lines',
-      problem: 'The validator detected mostly diagonal or curved strokes instead of straight architectural walls.',
+      title: `FOOTPRINT TOO SMALL (${dimStr} vs 160×160 px)`,
+      problem: `Your sketch is drawn too small (${dimStr}) in a tiny area of the canvas, which causes blurry ControlNet edge conditioning.`,
       solutions: [
+        {
+          step: 'Redraw Larger Layout',
+          desc: 'Click CLEAR and redraw your floor plan or elevation larger so it covers at least 40–60% of the canvas.',
+        },
+        {
+          step: 'Stretch Outer Walls',
+          desc: 'Stretch outer walls wider using the RECT tool.',
+        },
+        {
+          step: 'Resize Staged Stencils',
+          desc: 'Resize staged stencils using their corner drag handle before clicking Save.',
+        },
+      ],
+      quickAction: {
+        label: 'Select Rectangle Tool',
+        action: 'select_rect',
+      },
+    };
+  }
+
+  // Mistake 4: [MISSING_WALLS]
+  if (
+    rawMsg.includes('[MISSING_WALLS]') ||
+    msg.includes('insufficient orthogonal structural walls') ||
+    msg.includes('horizontal lines:') ||
+    msg.includes('vertical lines:') ||
+    msg.includes('straight line(s) detected')
+  ) {
+    const hMatch = rawMsg.match(/horizontal lines:\s*(\d+)/i);
+    const vMatch = rawMsg.match(/vertical lines:\s*(\d+)/i);
+    const nH = hMatch ? hMatch[1] : '0';
+    const nV = vMatch ? vMatch[1] : '0';
+
+    return {
+      title: `MISSING STRAIGHT WALLS (${nH}H / ${nV}V)`,
+      problem: `Detected only ${nH} horizontal and ${nV} vertical wall segments (at least 2 of each are needed to anchor floor/ceiling/wall planes).`,
+      solutions: [
+        {
+          step: 'Use Straight Line Tools',
+          desc: 'Use the LINE or RECT tool instead of freehand strokes to draw crisp horizontal ceilings/floors and vertical walls.',
+        },
+        {
+          step: 'Balance Structural Axes',
+          desc: 'Add parallel opposite walls to balance your elevation or room plan.',
+        },
         {
           step: 'Enable Perspective Grid',
-          desc: 'Enable the Perspective Grid guide and draw straight horizontal and vertical lines meeting at 90° corners.',
+          desc: 'Turn on the Perspective Grid guide to align straight structural axes.',
         },
       ],
       quickAction: {
@@ -103,39 +174,120 @@ const getSketchDiagnosis = (errorMsg) => {
     };
   }
 
-  // Case D: Unenclosed / Open Lines
-  if (msg.includes('enclosed') || msg.includes('contour') || msg.includes('gap')) {
+  // Mistake 5: [UNENCLOSED_SPACE]
+  if (
+    rawMsg.includes('[UNENCLOSED_SPACE]') ||
+    msg.includes('do not form a closed architectural room') ||
+    msg.includes('no enclosed space detected') ||
+    msg.includes('largest enclosed area') ||
+    msg.includes('enclosed habitable volumes')
+  ) {
     return {
-      title: 'Unenclosed / Open Lines',
-      problem: 'Your wall lines have open gaps and do not form an enclosed room or structural boundary.',
+      title: 'OPEN / UNCLOSED WALLS',
+      problem: 'Your wall lines have open gaps and do not connect into a closed room or structural zone.',
       solutions: [
         {
           step: 'Connect Wall Endpoints',
-          desc: 'Connect the endpoints of your outer walls so they form a closed loop/room before clicking Generate.',
+          desc: 'Connect the open endpoints of your outer walls so they form a closed polygon/rectangle.',
+        },
+        {
+          step: 'Seal Corner Gaps',
+          desc: 'Check corners for gaps where lines stop short of meeting.',
+        },
+        {
+          step: 'Create Perimeter with RECT',
+          desc: 'Use the RECT tool to create a guaranteed closed room perimeter first, then divide it with LINE.',
         },
       ],
       quickAction: {
-        label: 'Open Shape Stencils',
-        action: 'open_shapes',
+        label: 'Select Rectangle Tool',
+        action: 'select_rect',
       },
     };
   }
 
-  // Default Fallback: Any Other Validation Error
+  // Mistake 6: [NON_ORTHOGONAL]
+  if (
+    rawMsg.includes('[NON_ORTHOGONAL]') ||
+    msg.includes('slanted, curved, or acute angles') ||
+    msg.includes('right-angle corners') ||
+    msg.includes('non-orthogonal')
+  ) {
+    const angleMatch = rawMsg.match(/(\d+)%\s*(?:right-angle|of corners)/i);
+    const cornerPct = angleMatch ? angleMatch[1] : '';
+
+    return {
+      title: cornerPct ? `IRREGULAR / CURVED ANGLES (${cornerPct}%)` : 'IRREGULAR / CURVED ANGLES',
+      problem: 'Your drawing contains mostly diagonal, circular, or freehand curved lines rather than right-angle (90°) architectural corners.',
+      solutions: [
+        {
+          step: 'Replace Slanted Lines',
+          desc: 'Replace slanted/diagonal freehand lines with orthogonal (90°) corners using RECT and LINE.',
+        },
+        {
+          step: 'Frame Curved Features',
+          desc: 'If drawing an arch or curved feature, surround it with a straight rectangular wall frame first.',
+        },
+        {
+          step: 'Align with Perspective Grid',
+          desc: 'Use the Perspective Grid overlay to keep structural corners aligned.',
+        },
+      ],
+      quickAction: {
+        label: 'Enable Perspective Grid',
+        action: 'enable_grid',
+      },
+    };
+  }
+
+  // Mistake 7: [SERVER_CONNECTION]
+  if (
+    rawMsg.includes('[SERVER_CONNECTION]') ||
+    msg.includes('tunnel') ||
+    msg.includes('gpu worker') ||
+    msg.includes('unreachable') ||
+    msg.includes('colab') ||
+    msg.includes('connection')
+  ) {
+    return {
+      title: 'GPU WORKER OFFLINE',
+      problem: 'The local server could not reach the remote Colab T4 GPU tunnel.',
+      solutions: [
+        {
+          step: 'Verify ngrok Tunnel URL',
+          desc: 'Open the 3-dot menu → GPU Tunnel and verify your active ngrok URL.',
+        },
+        {
+          step: 'Check Colab Notebook Execution',
+          desc: 'Check that your Colab notebook cell is still running.',
+        },
+        {
+          step: 'Update Tunnel Endpoint',
+          desc: 'Paste the updated tunnel URL and retry.',
+        },
+      ],
+      quickAction: {
+        label: 'Configure GPU Tunnel',
+        action: 'open_tunnel',
+      },
+    };
+  }
+
+  // Fallback for any other unexpected error
   return {
-    title: 'Architectural Validation Guide',
-    problem: 'The drawing could not be verified by the architectural computer vision gatekeeper.',
+    title: 'GENERATION FAILED',
+    problem: rawMsg || 'The drawing could not be verified by the architectural computer vision gatekeeper.',
     solutions: [
       {
-        step: 'Closed Rectangular Outer Walls',
-        desc: 'Ensure walls meet at 90° right angles and form closed habitational rooms.',
+        step: 'Draw Closed Structural Perimeter',
+        desc: 'Ensure outer walls form a closed room and meet at straight 90° right angles.',
       },
       {
-        step: 'Minimum 2,500 px Stroke Detail',
-        desc: 'Add internal doors, windows, and partition lines to meet structural detail density.',
+        step: 'Add Detail & Density',
+        desc: 'Include internal doors, windows, and partition lines to meet structural detail density (≥ 2,500 px).',
       },
       {
-        step: 'Built-in Drafting Tools',
+        step: 'Use Built-in Stencils',
         desc: 'Use the built-in Stencil Shapes + Perspective Grid for computer-vision compliant blueprints.',
       },
     ],
@@ -271,7 +423,9 @@ const StudioWorkspace = () => {
       if (mode === 'sketch' && canvasRef.current) {
         const validation = canvasRef.current.validateSketch();
         if (!validation.valid) {
-          const validationMsg = `Please draw a more detailed architectural sketch. Simple scribbles are not enough for the AI to generate a perfect structure. (Drawn pixels: ${validation.drawnPixels}, minimum required: 2,500)`;
+          const validationMsg = validation.drawnPixels < 150
+            ? `[BLANK_CANVAS] Canvas is nearly empty (Drawn pixels: ${validation.drawnPixels}). No architectural lines were detected.`
+            : `[LOW_DENSITY] Sketch lacks sufficient architectural detail (Drawn pixels: ${validation.drawnPixels.toLocaleString()}, minimum required: 2,500).`;
           setError(validationMsg);
           setFullScreenImage(null);
           setFullScreenError(validationMsg);
@@ -516,17 +670,21 @@ const StudioWorkspace = () => {
                   initialTool={tool}
                   initialStrokeWidth={strokeWidth}
                   initialStrokeColor={strokeColor}
+                  onStageShape={(stagedData) => setStagingShape(stagedData)}
                 />
                 <PerspectiveGrid visible={perspectiveGridVisible} width={700} height={700} />
                 {stagingShape && (
                   <ShapeStagingOverlay
-                    shapeType={stagingShape}
+                    shapeType={typeof stagingShape === 'string' ? stagingShape : stagingShape.shapeType}
+                    initialBox={typeof stagingShape === 'object' ? stagingShape.box : null}
+                    lineData={typeof stagingShape === 'object' ? stagingShape.lineData : null}
                     strokeColor={strokeColor}
                     strokeWidth={strokeWidth}
                     canvasWidth={700}
                     canvasHeight={700}
                     onConfirm={(box) => {
-                      canvasRef.current?.stampShapeBox(stagingShape, box);
+                      const sType = typeof stagingShape === 'string' ? stagingShape : stagingShape.shapeType;
+                      canvasRef.current?.stampShapeBox(sType, box);
                       setStagingShape(null);
                     }}
                     onCancel={() => setStagingShape(null)}
@@ -1093,6 +1251,11 @@ const StudioWorkspace = () => {
                               setIsShapeModalOpen(true);
                             } else if (diagnosis.quickAction.action === 'enable_grid') {
                               setPerspectiveGridVisible(true);
+                            } else if (diagnosis.quickAction.action === 'select_rect') {
+                              setTool('rect');
+                              canvasRef.current?.setTool('rect');
+                            } else if (diagnosis.quickAction.action === 'open_tunnel') {
+                              setTunnelModalOpen(true);
                             }
                           }}
                           style={{

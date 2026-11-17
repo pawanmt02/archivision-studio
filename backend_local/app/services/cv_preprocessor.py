@@ -107,16 +107,39 @@ def validate_architectural_intent(b64_sketch: str) -> dict:
     dilated = cv2.dilate(binary, kernel, iterations=1)
 
     # ════════════════════════════════════════════════════════════════
+    # STROKE DETAIL / PIXEL DENSITY CHECK
+    # Mistake 1: Blank / Nearly Empty Canvas (drawn_pixels < 150)
+    # Mistake 2: Insufficient Detail / Low Stroke Density (150 <= drawn_pixels < 2500)
+    # ════════════════════════════════════════════════════════════════
+    drawn_pixels = int(cv2.countNonZero(binary))
+    if drawn_pixels < 150:
+        return {
+            "is_valid": False,
+            "failed_safeguard": 0,
+            "drawn_pixels": drawn_pixels,
+            "message": f"[BLANK_CANVAS] Canvas is nearly empty (Drawn pixels: {drawn_pixels}). No architectural lines were detected.",
+        }
+
+    if drawn_pixels < 2500:
+        return {
+            "is_valid": False,
+            "failed_safeguard": 0,
+            "drawn_pixels": drawn_pixels,
+            "message": f"[LOW_DENSITY] Sketch lacks sufficient architectural detail (Drawn pixels: {drawn_pixels:,}, minimum required: 2,500).",
+        }
+
+    # ════════════════════════════════════════════════════════════════
     # SAFEGUARD 1: Spatial Bounding Footprint Check
+    # Mistake 3: Sketch Too Small / Tiny Footprint (w < 160 or h < 160 or w * h < 35000)
     # Eliminates: L4 (small center doodles), isolated figures
-    # Architectural drawings span the canvas to establish spatial context.
     # ════════════════════════════════════════════════════════════════
     stroke_points = cv2.findNonZero(dilated)
     if stroke_points is None:
         return {
             "is_valid": False,
             "failed_safeguard": 1,
-            "message": "Blank canvas detected. Please draw an architectural sketch with walls, floors, and structural elements.",
+            "drawn_pixels": drawn_pixels,
+            "message": f"[BLANK_CANVAS] Canvas is nearly empty (Drawn pixels: {drawn_pixels}). No architectural lines were detected.",
         }
 
     x, y, w, h = cv2.boundingRect(stroke_points)
@@ -130,17 +153,15 @@ def validate_architectural_intent(b64_sketch: str) -> dict:
             "bounding_height": h,
             "footprint_area": footprint_area,
             "message": (
-                f"Spatial Footprint Too Small: Your drawing occupies only {w}\u00d7{h} px "
-                f"({footprint_area:,} px\u00b2 area). Architectural sketches must span at least "
-                f"160\u00d7160 px with a minimum footprint of 35,000 px\u00b2. "
-                f"Please draw a larger, more complete architectural layout."
+                f"[SMALL_FOOTPRINT] Drawing footprint is too small ({w}×{h} px; "
+                f"minimum required: 160×160 px spanning at least 35,000 px²)."
             ),
         }
 
     # ════════════════════════════════════════════════════════════════
     # SAFEGUARD 2: Dual-Axis Orthogonal Line Verification
+    # Mistake 4: Missing Straight Horizontal or Vertical Walls (N_H < 2 or N_V < 2)
     # Eliminates: L1 (stick figures), L3 (stars, zigzags)
-    # Gravity requires horizontal baselines and vertical load-bearing walls.
     # ════════════════════════════════════════════════════════════════
     lines = cv2.HoughLinesP(
         dilated, rho=1, theta=np.pi / 180,
@@ -149,32 +170,22 @@ def validate_architectural_intent(b64_sketch: str) -> dict:
 
     lines_detected = len(lines) if lines is not None else 0
 
-    if lines_detected < 3:
-        return {
-            "is_valid": False,
-            "failed_safeguard": 2,
-            "lines_detected": lines_detected,
-            "message": (
-                f"Insufficient geometric structure: Only {lines_detected} straight line(s) detected "
-                f"(minimum 3 required). Please draw distinct straight lines such as walls, floors, or a roof."
-            ),
-        }
-
     h_count = 0  # horizontal lines
     v_count = 0  # vertical lines
 
-    for line in lines:
-        coords = line[0] if line.ndim > 1 else line
-        x1, y1, x2, y2 = coords
-        angle_deg = abs(np.degrees(np.arctan2(y2 - y1, x2 - x1)))
-        # Horizontal bucket: θ ∈ [0°, 20°] ∪ [160°, 180°]
-        if angle_deg <= 20 or angle_deg >= 160:
-            h_count += 1
-        # Vertical bucket: θ ∈ [70°, 110°]
-        elif 70 <= angle_deg <= 110:
-            v_count += 1
+    if lines is not None:
+        for line in lines:
+            coords = line[0] if line.ndim > 1 else line
+            x1, y1, x2, y2 = coords
+            angle_deg = abs(np.degrees(np.arctan2(y2 - y1, x2 - x1)))
+            # Horizontal bucket: θ ∈ [0°, 20°] ∪ [160°, 180°]
+            if angle_deg <= 20 or angle_deg >= 160:
+                h_count += 1
+            # Vertical bucket: θ ∈ [70°, 110°]
+            elif 70 <= angle_deg <= 110:
+                v_count += 1
 
-    if h_count < 2 or v_count < 2:
+    if h_count < 2 or v_count < 2 or lines_detected < 3:
         return {
             "is_valid": False,
             "failed_safeguard": 2,
@@ -182,10 +193,8 @@ def validate_architectural_intent(b64_sketch: str) -> dict:
             "vertical_lines": v_count,
             "lines_detected": lines_detected,
             "message": (
-                f"Non-Architectural Geometry: Architecture requires both horizontal foundations "
-                f"and vertical load-bearing elements. Detected {h_count} horizontal and {v_count} vertical "
-                f"line(s) (minimum 2 each required). Diagonal-only shapes like stars, stick figures, "
-                f"or zigzags are not valid architectural sketches."
+                f"[MISSING_WALLS] Insufficient orthogonal structural walls detected "
+                f"(Horizontal lines: {h_count}/2 required, Vertical lines: {v_count}/2 required)."
             ),
         }
 
@@ -232,18 +241,14 @@ def validate_architectural_intent(b64_sketch: str) -> dict:
             "enclosure_ratio": round(enclosure_ratio * 100, 1),
             "solidity": round(solidity, 3),
             "message": (
-                f"No Enclosed Space Detected: The largest closed region in your sketch is "
-                f"{max_contour_area:.0f} px\u00b2 ({enclosure_ratio * 100:.1f}% of footprint, "
-                f"solidity {solidity:.2f}). "
-                f"Architecture requires enclosed habitable volumes (rooms, corridors) of at least "
-                f"4,000 px\u00b2 covering \u22658% of the drawing footprint with solid boundaries. "
-                f"Open-ended shapes like stick figures, crosses, grid patterns, or text characters "
-                f"cannot define interior spaces."
+                f"[UNENCLOSED_SPACE] Walls do not form a closed architectural room or boundary "
+                f"(Largest enclosed area: {int(max_contour_area):,} px², minimum required: 4,000 px²)."
             ),
         }
 
     # ════════════════════════════════════════════════════════════════
     # SAFEGUARD 4: Corner Orthogonality Distribution
+    # Mistake 6: Non-Orthogonal / Diagonal or Curved Scribble (orthogonal_corner_ratio < 0.50)
     # Eliminates: L3 (stars with 36° angles, zigzags, triangles)
     # Architectural rooms meet at ~90°. Acute shapes deviate toward 36°–60°.
     # ════════════════════════════════════════════════════════════════
@@ -284,10 +289,8 @@ def validate_architectural_intent(b64_sketch: str) -> dict:
                     "total_corners": total_corners,
                     "orthogonal_pct": round(orthogonal_pct, 1),
                     "message": (
-                        f"Non-Orthogonal Geometry: Only {orthogonal_pct:.0f}% of corners are near 90\u00b0 "
-                        f"({orthogonal_corners}/{total_corners} corners within 70\u00b0\u2013110\u00b0). "
-                        f"Architectural structures require at least 50% right-angle intersections. "
-                        f"Acute shapes like stars, triangles, or zigzags are not valid architectural forms."
+                        f"[NON_ORTHOGONAL] Too many slanted, curved, or acute angles detected "
+                        f"({round(orthogonal_pct):.0f}% right-angle corners; minimum 50% required for architectural geometry)."
                     ),
                 }
 

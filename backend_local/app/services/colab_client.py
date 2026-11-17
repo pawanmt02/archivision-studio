@@ -18,7 +18,7 @@ async def _post_to_tunnel(endpoint: str, payload: dict) -> dict:
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            raise Exception(f"Tunnel request failed: {e}")
+            raise Exception(f"[SERVER_CONNECTION] Tunnel request failed: {e}")
 
 async def generate_via_sketch(sketch_b64: str, positive_prompt: str, negative_prompt: str,
                                seed: int, num_steps: int, guidance_scale: float,

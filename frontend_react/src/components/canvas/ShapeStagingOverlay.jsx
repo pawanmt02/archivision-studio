@@ -17,6 +17,8 @@ import { Check, X } from 'lucide-react';
  */
 const ShapeStagingOverlay = ({
   shapeType,
+  initialBox = null,
+  lineData = null,
   strokeColor = '#000000',
   strokeWidth = 2,
   canvasWidth = 512,
@@ -29,6 +31,7 @@ const ShapeStagingOverlay = ({
     switch (shapeType) {
       case 'square': return { w: 150, h: 150 };
       case 'rectangle': return { w: 220, h: 130 };
+      case 'line': return { w: 200, h: 60 };
       case 'circle': return { w: 160, h: 160 };
       case 'triangle': return { w: 180, h: 150 };
       case 'arch': return { w: 140, h: 190 };
@@ -41,18 +44,25 @@ const ShapeStagingOverlay = ({
     }
   };
 
-  const initial = getDefaultSize();
+  const initial = initialBox ? { w: initialBox.w, h: initialBox.h } : getDefaultSize();
   const overlayRef = useRef(null);
   const [box, setBox] = useState({
-    x: (canvasWidth - initial.w) / 2,
-    y: (canvasHeight - initial.h) / 2,
+    x: initialBox ? initialBox.x : (canvasWidth - initial.w) / 2,
+    y: initialBox ? initialBox.y : (canvasHeight - initial.h) / 2,
     w: initial.w,
     h: initial.h,
   });
 
   // Center bounding box accurately relative to the actual canvas container DOM element
   useEffect(() => {
-    if (overlayRef.current?.parentElement) {
+    if (initialBox) {
+      setBox({
+        x: initialBox.x,
+        y: initialBox.y,
+        w: initialBox.w,
+        h: initialBox.h,
+      });
+    } else if (overlayRef.current?.parentElement) {
       const parentRect = overlayRef.current.parentElement.getBoundingClientRect();
       if (parentRect.width && parentRect.height) {
         setBox({
@@ -63,7 +73,7 @@ const ShapeStagingOverlay = ({
         });
       }
     }
-  }, []);
+  }, [initialBox]);
 
   const interactionRef = useRef(null); // { mode: 'drag'|'resize', startX, startY, startBox }
 
@@ -95,8 +105,9 @@ const ShapeStagingOverlay = ({
         const nextY = Math.max(0, Math.min(boundH - startBox.h, startBox.y + dy));
         setBox((prev) => ({ ...prev, x: nextX, y: nextY }));
       } else if (mode === 'resize') {
-        const nextW = Math.max(30, Math.min(boundW - startBox.x, startBox.w + dx));
-        const nextH = Math.max(30, Math.min(boundH - startBox.y, startBox.h + dy));
+        const minDim = shapeType === 'line' ? 4 : 20;
+        const nextW = Math.max(minDim, Math.min(boundW - startBox.x, startBox.w + dx));
+        const nextH = Math.max(minDim, Math.min(boundH - startBox.y, startBox.h + dy));
         setBox((prev) => ({ ...prev, w: nextW, h: nextH }));
       }
     };
@@ -111,7 +122,7 @@ const ShapeStagingOverlay = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [canvasWidth, canvasHeight]);
+  }, [canvasWidth, canvasHeight, shapeType]);
 
   // Render vector shape preview scaled to bounding box (w x h)
   const renderShapeVector = () => {
@@ -120,9 +131,26 @@ const ShapeStagingOverlay = ({
     const cy = h / 2;
 
     switch (shapeType) {
+      case 'line': {
+        const sx = lineData?.startRatio ? box.w * lineData.startRatio.x : 0;
+        const sy = lineData?.startRatio ? box.h * lineData.startRatio.y : box.h / 2;
+        const ex = lineData?.endRatio ? box.w * lineData.endRatio.x : box.w;
+        const ey = lineData?.endRatio ? box.h * lineData.endRatio.y : box.h / 2;
+        return (
+          <line
+            x1={sx}
+            y1={sy}
+            x2={ex}
+            y2={ey}
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+          />
+        );
+      }
       case 'square':
       case 'rectangle':
-        return <rect x={strokeWidth} y={strokeWidth} width={w - strokeWidth * 2} height={h - strokeWidth * 2} fill="none" stroke={strokeColor} strokeWidth={strokeWidth} />;
+        return <rect x={strokeWidth} y={strokeWidth} width={Math.max(1, w - strokeWidth * 2)} height={Math.max(1, h - strokeWidth * 2)} fill="none" stroke={strokeColor} strokeWidth={strokeWidth} />;
       case 'circle':
         return <ellipse cx={cx} cy={cy} rx={(w - strokeWidth * 2) / 2} ry={(h - strokeWidth * 2) / 2} fill="none" stroke={strokeColor} strokeWidth={strokeWidth} />;
       case 'triangle':
@@ -197,7 +225,7 @@ const ShapeStagingOverlay = ({
   return (
     <div
       ref={overlayRef}
-      onDoubleClick={() => onConfirm(box)}
+      onDoubleClick={() => onConfirm({ ...box, lineData })}
       style={{
         position: 'absolute',
         left: `${box.x}px`,
@@ -236,7 +264,7 @@ const ShapeStagingOverlay = ({
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            onConfirm(box);
+            onConfirm({ ...box, lineData });
           }}
           title="Save Shape to Canvas"
           className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 shadow-md hover:shadow-blue-500/30 transition-all cursor-pointer border border-blue-400/40"

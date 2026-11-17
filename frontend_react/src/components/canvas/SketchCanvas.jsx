@@ -1,15 +1,24 @@
 import React, { useRef, useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 
-const SketchCanvas = forwardRef(({ width = 512, height = 512 }, ref) => {
+const SketchCanvas = forwardRef(({
+  width = 512,
+  height = 512,
+  initialTool = 'draw',
+  initialStrokeWidth = 2,
+  initialStrokeColor = '#000000',
+  onStageShape
+}, ref) => {
   const canvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [tool, setTool] = useState('draw');
-  const [strokeWidth, setStrokeWidth] = useState(2);
+  const [tool, setTool] = useState(initialTool);
+  const [strokeWidth, setStrokeWidth] = useState(initialStrokeWidth);
   const [eraserWidth, setEraserWidth] = useState(20);
-  const [strokeColor, setStrokeColor] = useState('#000000');
+  const [strokeColor, setStrokeColor] = useState(initialStrokeColor);
   const [history, setHistory] = useState([]);
   
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
+  const [startDomPos, setStartDomPos] = useState({ x: 0, y: 0 });
+  const lastDomPosRef = useRef({ x: 0, y: 0 });
   const [previewCanvas, setPreviewCanvas] = useState(null);
   const snapshotRef = useRef(null);
 
@@ -67,11 +76,25 @@ const SketchCanvas = forwardRef(({ width = 512, height = 512 }, ref) => {
   const getCoordinates = (e) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    const clientX = e.clientX || (e.touches && e.touches[0].clientX);
-    const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+    const touch = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]);
+    const clientX = e.clientX !== undefined ? e.clientX : (touch ? touch.clientX : 0);
+    const clientY = e.clientY !== undefined ? e.clientY : (touch ? touch.clientY : 0);
     return {
       x: (clientX - rect.left) * (canvas.width / rect.width),
       y: (clientY - rect.top) * (canvas.height / rect.height)
+    };
+  };
+
+  const getDomCoordinates = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    const touch = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]);
+    const clientX = e.clientX !== undefined ? e.clientX : (touch ? touch.clientX : 0);
+    const clientY = e.clientY !== undefined ? e.clientY : (touch ? touch.clientY : 0);
+    return {
+      x: clientX - rect.left,
+      y: clientY - rect.top
     };
   };
 
@@ -95,8 +118,11 @@ const SketchCanvas = forwardRef(({ width = 512, height = 512 }, ref) => {
     }
 
     const { x, y } = getCoordinates(e);
+    const domPos = getDomCoordinates(e);
     setIsDrawing(true);
     setStartPos({ x, y });
+    setStartDomPos(domPos);
+    lastDomPosRef.current = domPos;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -132,6 +158,9 @@ const SketchCanvas = forwardRef(({ width = 512, height = 512 }, ref) => {
 
     if (!isDrawing) return;
     const { x, y } = getCoordinates(e);
+    const domPos = getDomCoordinates(e);
+    lastDomPosRef.current = domPos;
+
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     
@@ -188,6 +217,66 @@ const SketchCanvas = forwardRef(({ width = 512, height = 512 }, ref) => {
     e.preventDefault();
     if (!isDrawing) return;
     setIsDrawing(false);
+
+    // Staging flow for LINE and RECT: stage instead of baking on mouseup
+    if (tool === 'rect' || tool === 'line') {
+      // 1. Revert canvas to pre-drag snapshot so temporary drag preview is NOT permanently baked
+      const canvas = canvasRef.current;
+      const ctx = canvas?.getContext('2d');
+      if (canvas && ctx && snapshotRef.current) {
+        ctx.putImageData(snapshotRef.current, 0, 0);
+      }
+
+      // 2. Compute final drag coordinates
+      const endDom = getDomCoordinates(e);
+      const finalX = endDom.x || lastDomPosRef.current.x;
+      const finalY = endDom.y || lastDomPosRef.current.y;
+
+      const x1 = startDomPos.x;
+      const y1 = startDomPos.y;
+      const x2 = finalX;
+      const y2 = finalY;
+
+      const domW = Math.abs(x2 - x1);
+      const domH = Math.abs(y2 - y1);
+      const domLen = Math.hypot(x2 - x1, y2 - y1);
+
+      // Threshold: width > 4px or height > 4px or length > 4px
+      if ((tool === 'rect' && (domW > 4 || domH > 4)) || (tool === 'line' && domLen > 4)) {
+        const minBoxDim = tool === 'line' ? 8 : 4;
+        const boxW = Math.max(domW, minBoxDim);
+        const boxH = Math.max(domH, minBoxDim);
+
+        const boxX = domW < minBoxDim ? Math.min(x1, x2) - (minBoxDim - domW) / 2 : Math.min(x1, x2);
+        const boxY = domH < minBoxDim ? Math.min(y1, y2) - (minBoxDim - domH) / 2 : Math.min(y1, y2);
+
+        const shapeType = tool === 'rect' ? 'rectangle' : 'line';
+
+        let lineData = null;
+        if (tool === 'line') {
+          lineData = {
+            startRatio: {
+              x: boxW > 0 ? (x1 - boxX) / boxW : 0,
+              y: boxH > 0 ? (y1 - boxY) / boxH : 0.5,
+            },
+            endRatio: {
+              x: boxW > 0 ? (x2 - boxX) / boxW : 1,
+              y: boxH > 0 ? (y2 - boxY) / boxH : 0.5,
+            },
+          };
+        }
+
+        if (onStageShape) {
+          onStageShape({
+            shapeType,
+            box: { x: boxX, y: boxY, w: boxW, h: boxH },
+            lineData,
+          });
+        }
+      }
+      return;
+    }
+
     saveHistoryState(canvasRef.current);
   };
 
@@ -335,7 +424,8 @@ const SketchCanvas = forwardRef(({ width = 512, height = 512 }, ref) => {
   };
 
   // Stamp a shape directly using absolute bounding box dimensions (x, y, w, h)
-  const stampShapeBox = (shapeType, { x, y, w, h }) => {
+  const stampShapeBox = (shapeType, box) => {
+    const { x, y, w, h, lineData } = box;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -361,6 +451,15 @@ const SketchCanvas = forwardRef(({ width = 512, height = 512 }, ref) => {
     const cy = scaledY + scaledH / 2;
 
     switch (shapeType) {
+      case 'line': {
+        const sx = lineData?.startRatio ? scaledX + scaledW * lineData.startRatio.x : scaledX;
+        const sy = lineData?.startRatio ? scaledY + scaledH * lineData.startRatio.y : scaledY + scaledH / 2;
+        const ex = lineData?.endRatio ? scaledX + scaledW * lineData.endRatio.x : scaledX + scaledW;
+        const ey = lineData?.endRatio ? scaledY + scaledH * lineData.endRatio.y : scaledY + scaledH / 2;
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(ex, ey);
+        break;
+      }
       case 'square':
       case 'rectangle': {
         ctx.rect(scaledX, scaledY, scaledW, scaledH);

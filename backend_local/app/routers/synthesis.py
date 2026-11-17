@@ -28,16 +28,8 @@ async def generate_render(request: RenderRequest, db: Session = Depends(get_db),
     # 3. Setup seed
     seed = request.seed if request.seed is not None else random.randint(0, 2**32 - 1)
     
-    # Restrict generation to INTERIOR architectural designs ONLY
-    interior_positive_suffix = ", architectural interior, indoor lighting, interior design, realistic room proportions, highly detailed floor plan, enclosed space."
-    exterior_negative_suffix = ", sky, exterior, landscape, outdoors, building facade, clouds, grass, trees, natural sunlight."
-
-    effective_positive_prompt = f"{request.positive_prompt or ''}{interior_positive_suffix}"
-    effective_negative_prompt = (
-        f"{request.negative_prompt}{exterior_negative_suffix}"
-        if request.negative_prompt
-        else exterior_negative_suffix.lstrip(", ")
-    )
+    user_pos = request.positive_prompt or ""
+    user_neg = request.negative_prompt or ""
 
     cleaned_sketch = None
     edge_overlay = None
@@ -53,10 +45,12 @@ async def generate_render(request: RenderRequest, db: Session = Depends(get_db),
             if not validation["is_valid"]:
                 raise HTTPException(status_code=400, detail=validation["message"])
             
-            # Prompts
-            pos, neg = build_sketch_prompt(effective_positive_prompt, request.style_preset)
-            if effective_negative_prompt:
-                neg = f"{effective_negative_prompt}, {neg}"
+            # Construct prompts anchored in authentic Indian architectural design
+            pos, neg = build_sketch_prompt(
+                user_prompt=user_pos,
+                style_preset=request.style_preset,
+                user_negative_prompt=user_neg
+            )
                 
             # Generate
             result = await generate_via_sketch(
@@ -75,10 +69,12 @@ async def generate_render(request: RenderRequest, db: Session = Depends(get_db),
             edge_score = eval_result["iou_score"]
             
         else:
-            # Text mode
-            pos, neg = build_text_prompt(effective_positive_prompt, request.style_preset)
-            if effective_negative_prompt:
-                neg = f"{effective_negative_prompt}, {neg}"
+            # Text mode with Indian architectural prompt construction
+            pos, neg = build_text_prompt(
+                user_prompt=user_pos,
+                style_preset=request.style_preset,
+                user_negative_prompt=user_neg
+            )
                 
             result = await generate_via_text(
                 positive_prompt=pos,

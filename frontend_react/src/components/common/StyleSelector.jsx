@@ -1,31 +1,34 @@
 import React from 'react';
 
-const styles = [
-  { id: 'Photorealistic', label: 'Photorealistic', icon: '📸', color: '#0ea5e9', desc: 'Highly detailed, ultra-realistic render' },
-  { id: 'Brutalism',      label: 'Brutalism',      icon: '🏢', color: '#64748b', desc: 'Raw concrete, geometric forms' },
-  { id: 'Minimalist',    label: 'Minimalist',    icon: '✨', color: '#14b8a6', desc: 'Clean lines, open spaces' },
-  { id: 'Biophilic',     label: 'Biophilic',     icon: '🌿', color: '#22c55e', desc: 'Nature-integrated design' },
-  { id: 'Industrial',    label: 'Industrial',    icon: '⚙️',  color: '#f97316', desc: 'Exposed pipes and materials' },
-  { id: 'Art Deco',      label: 'Art Deco',      icon: '🎭', color: '#a855f7', desc: 'Geometric, ornamental luxury' },
-  { id: 'Futuristic',    label: 'Futuristic',    icon: '🚀', color: '#6366f1', desc: 'Sleek, sci-fi architecture' },
+const roomOptions = [
+  { id: 'Living Room',  label: 'Living Room',  icon: '🛋️', color: '#0ea5e9', desc: 'Spacious main living and lounge area' },
+  { id: 'Kitchen',      label: 'Kitchen',      icon: '🍳', color: '#f97316', desc: 'Modern culinary and cooking space' },
+  { id: 'Bedroom',      label: 'Bedroom',      icon: '🛏️', color: '#a855f7', desc: 'Comfortable private sleeping retreat' },
+  { id: 'Bathroom',     label: 'Bathroom',     icon: '🛁', color: '#06b6d4', desc: 'Luxury bath and vanity interior' },
+  { id: 'Dining Room',  label: 'Dining Room',  icon: '🍷', color: '#eab308', desc: 'Elegant architectural dining space' },
+  { id: 'Home Office',  label: 'Home Office',  icon: '💼', color: '#3b82f6', desc: 'Dedicated focus and study workstation' },
+  { id: 'Balcony',      label: 'Balcony',      icon: '🌆', color: '#10b981', desc: 'Overhanging scenic balcony terrace' },
+  { id: 'Patio',        label: 'Patio',        icon: '🌿', color: '#22c55e', desc: 'Enclosed indoor/outdoor garden patio' },
+  { id: 'Lounge',       label: 'Lounge',       icon: '☕', color: '#ec4899', desc: 'Relaxing ambient lounge nook' },
+  { id: 'Home Theater', label: 'Home Theater', icon: '🎬', color: '#6366f1', desc: 'Acoustic cinema room with luxury seating' },
 ];
 
-const StyleSelector = ({ selectedStyle, onChange }) => {
+const StyleSelector = ({ roomType, onChange }) => {
   return (
     <div className="panel-section">
-      <div className="panel-title">Style Preset</div>
+      <div className="panel-title">ROOM TYPE</div>
       <div className="style-grid">
-        {styles.map(style => (
+        {roomOptions.map((room) => (
           <div
-            key={style.id}
-            className={`style-card ${selectedStyle === style.id ? 'active' : ''}`}
-            onClick={() => onChange(style.id)}
-            title={style.desc}
-            style={{ '--style-color': style.color }}
+            key={room.id}
+            className={`style-card ${roomType === room.id ? 'active' : ''}`}
+            onClick={() => onChange(room.id)}
+            title={room.desc}
+            style={{ '--style-color': room.color }}
           >
-            <span className="style-icon">{style.icon}</span>
-            <span className="style-label">{style.label}</span>
-            {selectedStyle === style.id && (
+            <span className="style-icon">{room.icon}</span>
+            <span className="style-label">{room.label}</span>
+            {roomType === room.id && (
               <span className="style-check">✓</span>
             )}
           </div>

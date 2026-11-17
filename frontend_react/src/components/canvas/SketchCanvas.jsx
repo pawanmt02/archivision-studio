@@ -5,11 +5,13 @@ const SketchCanvas = forwardRef(({ width = 512, height = 512 }, ref) => {
   const [isDrawing, setIsDrawing] = useState(false);
   const [tool, setTool] = useState('draw');
   const [strokeWidth, setStrokeWidth] = useState(2);
+  const [eraserWidth, setEraserWidth] = useState(20);
   const [strokeColor, setStrokeColor] = useState('#000000');
   const [history, setHistory] = useState([]);
   
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
   const [previewCanvas, setPreviewCanvas] = useState(null);
+  const snapshotRef = useRef(null);
 
   // Shape placement mode state
   const [activeShape, setActiveShape] = useState(null);
@@ -96,10 +98,15 @@ const SketchCanvas = forwardRef(({ width = 512, height = 512 }, ref) => {
     setIsDrawing(true);
     setStartPos({ x, y });
 
-    const ctx = canvasRef.current.getContext('2d');
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+
+    // Capture canvas snapshot for shapes preview
+    snapshotRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
     ctx.beginPath();
     ctx.moveTo(x, y);
-    ctx.lineWidth = strokeWidth;
+    ctx.lineWidth = tool === 'eraser' ? eraserWidth : strokeWidth;
     ctx.strokeStyle = tool === 'eraser' ? '#ffffff' : strokeColor;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -129,29 +136,51 @@ const SketchCanvas = forwardRef(({ width = 512, height = 512 }, ref) => {
     const ctx = canvas.getContext('2d');
     
     if (tool === 'draw' || tool === 'eraser') {
+      ctx.lineWidth = tool === 'eraser' ? eraserWidth : strokeWidth;
+      ctx.strokeStyle = tool === 'eraser' ? '#ffffff' : strokeColor;
       ctx.lineTo(x, y);
       ctx.stroke();
-    } else if (tool === 'line' || tool === 'rect') {
-      const pCtx = previewCanvas.getContext('2d');
-      pCtx.clearRect(0, 0, width, height);
-      pCtx.drawImage(canvas, 0, 0);
+    } else if (tool === 'line' || tool === 'rect' || tool === 'shapes' || tool === 'shape' || tool === 'circle' || tool === 'triangle') {
+      if (snapshotRef.current) {
+        ctx.putImageData(snapshotRef.current, 0, 0);
+      }
       
-      pCtx.beginPath();
-      pCtx.lineWidth = strokeWidth;
-      pCtx.strokeStyle = strokeColor;
-      pCtx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.lineWidth = strokeWidth;
+      ctx.strokeStyle = strokeColor;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      // Calculate dimensions strictly as difference from starting click coordinates
+      const width = x - startPos.x;
+      const height = y - startPos.y;
       
       if (tool === 'line') {
-        pCtx.moveTo(startPos.x, startPos.y);
-        pCtx.lineTo(x, y);
+        ctx.moveTo(startPos.x, startPos.y);
+        ctx.lineTo(x, y);
       } else if (tool === 'rect') {
-        pCtx.rect(startPos.x, startPos.y, x - startPos.x, y - startPos.y);
+        ctx.strokeRect(startPos.x, startPos.y, width, height);
+      } else if (tool === 'circle') {
+        const radiusX = Math.abs(width) / 2;
+        const radiusY = Math.abs(height) / 2;
+        const centerX = startPos.x + width / 2;
+        const centerY = startPos.y + height / 2;
+        ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, Math.PI * 2);
+      } else if (tool === 'triangle') {
+        const centerX = startPos.x + width / 2;
+        ctx.moveTo(centerX, startPos.y);
+        ctx.lineTo(startPos.x + width, startPos.y + height);
+        ctx.lineTo(startPos.x, startPos.y + height);
+        ctx.closePath();
+      } else if (tool === 'shapes' || tool === 'shape') {
+        // Shapes tool drawing logic (anchored relative to startPos, avoiding any offset)
+        const radiusX = Math.abs(width) / 2;
+        const radiusY = Math.abs(height) / 2;
+        const centerX = startPos.x + width / 2;
+        const centerY = startPos.y + height / 2;
+        ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, Math.PI * 2);
       }
-      pCtx.stroke();
-      
-      const realCtx = canvas.getContext('2d');
-      realCtx.clearRect(0, 0, width, height);
-      realCtx.drawImage(previewCanvas, 0, 0);
+      ctx.stroke();
     }
   };
 
@@ -310,6 +339,16 @@ const SketchCanvas = forwardRef(({ width = 512, height = 512 }, ref) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+
+    // Accurately map DOM CSS bounding box coordinates to canvas internal pixel buffer
+    const scaleX = rect.width ? canvas.width / rect.width : 1;
+    const scaleY = rect.height ? canvas.height / rect.height : 1;
+
+    const scaledX = x * scaleX;
+    const scaledY = y * scaleY;
+    const scaledW = w * scaleX;
+    const scaledH = h * scaleY;
 
     ctx.save();
     ctx.lineWidth = strokeWidth;
@@ -318,90 +357,90 @@ const SketchCanvas = forwardRef(({ width = 512, height = 512 }, ref) => {
     ctx.lineJoin = 'round';
     ctx.beginPath();
 
-    const cx = x + w / 2;
-    const cy = y + h / 2;
+    const cx = scaledX + scaledW / 2;
+    const cy = scaledY + scaledH / 2;
 
     switch (shapeType) {
       case 'square':
       case 'rectangle': {
-        ctx.rect(x, y, w, h);
+        ctx.rect(scaledX, scaledY, scaledW, scaledH);
         break;
       }
       case 'circle': {
-        ctx.ellipse(cx, cy, w / 2, h / 2, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx, cy, Math.abs(scaledW) / 2, Math.abs(scaledH) / 2, 0, 0, Math.PI * 2);
         break;
       }
       case 'triangle': {
-        ctx.moveTo(cx, y);
-        ctx.lineTo(x + w, y + h);
-        ctx.lineTo(x, y + h);
+        ctx.moveTo(cx, scaledY);
+        ctx.lineTo(scaledX + scaledW, scaledY + scaledH);
+        ctx.lineTo(scaledX, scaledY + scaledH);
         ctx.closePath();
         break;
       }
       case 'arch': {
-        const r = w / 2;
-        const pillarTop = Math.max(y + r, y + h - r);
-        ctx.moveTo(x, y + h);
-        ctx.lineTo(x, pillarTop);
+        const r = scaledW / 2;
+        const pillarTop = Math.max(scaledY + r, scaledY + scaledH - r);
+        ctx.moveTo(scaledX, scaledY + scaledH);
+        ctx.lineTo(scaledX, pillarTop);
         ctx.arc(cx, pillarTop, r, Math.PI, 0, false);
-        ctx.lineTo(x + w, y + h);
+        ctx.lineTo(scaledX + scaledW, scaledY + scaledH);
         ctx.closePath();
         break;
       }
       case 'window': {
-        ctx.rect(x, y, w, h);
-        ctx.moveTo(cx, y);
-        ctx.lineTo(cx, y + h);
-        ctx.moveTo(x, cy);
-        ctx.lineTo(x + w, cy);
+        ctx.rect(scaledX, scaledY, scaledW, scaledH);
+        ctx.moveTo(cx, scaledY);
+        ctx.lineTo(cx, scaledY + scaledH);
+        ctx.moveTo(scaledX, cy);
+        ctx.lineTo(scaledX + scaledW, cy);
         break;
       }
       case 'door': {
-        ctx.rect(x + 8, y, w - 16, h);
-        ctx.moveTo(x, y + h);
-        ctx.lineTo(x + w, y + h);
-        ctx.moveTo(x + w - 22, cy + 8);
-        ctx.arc(x + w - 22, cy + 8, 3, 0, Math.PI * 2);
+        ctx.rect(scaledX + 8 * scaleX, scaledY, scaledW - 16 * scaleX, scaledH);
+        ctx.moveTo(scaledX, scaledY + scaledH);
+        ctx.lineTo(scaledX + scaledW, scaledY + scaledH);
+        ctx.moveTo(scaledX + scaledW - 22 * scaleX, cy + 8 * scaleY);
+        ctx.arc(scaledX + scaledW - 22 * scaleX, cy + 8 * scaleY, 3 * scaleX, 0, Math.PI * 2);
         break;
       }
       case 'staircase': {
         const steps = 4;
-        const dx = w / steps;
-        const dy = h / steps;
-        ctx.moveTo(x, y + h);
+        const dx = scaledW / steps;
+        const dy = scaledH / steps;
+        ctx.moveTo(scaledX, scaledY + scaledH);
         for (let i = 0; i < steps; i++) {
-          ctx.lineTo(x + i * dx, y + h - (i + 1) * dy);
-          ctx.lineTo(x + (i + 1) * dx, y + h - (i + 1) * dy);
+          ctx.lineTo(scaledX + i * dx, scaledY + scaledH - (i + 1) * dy);
+          ctx.lineTo(scaledX + (i + 1) * dx, scaledY + scaledH - (i + 1) * dy);
         }
-        ctx.lineTo(x + w, y + h);
+        ctx.lineTo(scaledX + scaledW, scaledY + scaledH);
         ctx.closePath();
         break;
       }
       case 'cross': {
-        const armW = w * 0.3;
-        const armH = h * 0.3;
-        const x1 = x + (w - armW) / 2;
-        const x2 = x + (w + armW) / 2;
-        const y1 = y + (h - armH) / 2;
-        const y2 = y + (h + armH) / 2;
-        ctx.moveTo(x1, y);
-        ctx.lineTo(x2, y);
+        const armW = scaledW * 0.3;
+        const armH = scaledH * 0.3;
+        const x1 = scaledX + (scaledW - armW) / 2;
+        const x2 = scaledX + (scaledW + armW) / 2;
+        const y1 = scaledY + (scaledH - armH) / 2;
+        const y2 = scaledY + (scaledH + armH) / 2;
+        ctx.moveTo(x1, scaledY);
+        ctx.lineTo(x2, scaledY);
         ctx.lineTo(x2, y1);
-        ctx.lineTo(x + w, y1);
-        ctx.lineTo(x + w, y2);
+        ctx.lineTo(scaledX + scaledW, y1);
+        ctx.lineTo(scaledX + scaledW, y2);
         ctx.lineTo(x2, y2);
-        ctx.lineTo(x2, y + h);
-        ctx.lineTo(x1, y + h);
+        ctx.lineTo(x2, scaledY + scaledH);
+        ctx.lineTo(x1, scaledY + scaledH);
         ctx.lineTo(x1, y2);
-        ctx.lineTo(x, y2);
-        ctx.lineTo(x, y1);
+        ctx.lineTo(scaledX, y2);
+        ctx.lineTo(scaledX, y1);
         ctx.lineTo(x1, y1);
         ctx.closePath();
         break;
       }
       case 'hexagon': {
-        const rx = w / 2;
-        const ry = h / 2;
+        const rx = scaledW / 2;
+        const ry = scaledH / 2;
         for (let i = 0; i < 6; i++) {
           const angle = (i * Math.PI) / 3 - Math.PI / 6;
           const px = cx + rx * Math.cos(angle);
@@ -413,7 +452,7 @@ const SketchCanvas = forwardRef(({ width = 512, height = 512 }, ref) => {
         break;
       }
       default:
-        ctx.rect(x, y, w, h);
+        ctx.rect(scaledX, scaledY, scaledW, scaledH);
         break;
     }
 
@@ -425,9 +464,11 @@ const SketchCanvas = forwardRef(({ width = 512, height = 512 }, ref) => {
   useImperativeHandle(ref, () => ({
     setTool,
     setStrokeWidth,
+    setEraserWidth,
     setStrokeColor,
     tool,
     strokeWidth,
+    eraserWidth,
     strokeColor,
     insertShape,
     stampShapeBox,
@@ -449,6 +490,53 @@ const SketchCanvas = forwardRef(({ width = 512, height = 512 }, ref) => {
     },
     exportCanvas: () => {
       return canvasRef.current.toDataURL('image/png');
+    },
+    loadSketchImage: (imageSrc) => {
+      const canvas = canvasRef.current;
+      if (!canvas || !imageSrc) return;
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        // 1. Fill canvas with solid pure white background
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // 2. Offscreen temporary canvas to process and invert pixels
+        const offscreen = document.createElement('canvas');
+        offscreen.width = canvas.width;
+        offscreen.height = canvas.height;
+        const offCtx = offscreen.getContext('2d');
+        offCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        const imgData = offCtx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imgData.data;
+
+        // Determine if image has dark background (ControlNet format: white lines on black)
+        let darkSamples = 0;
+        const step = 20;
+        for (let i = 0; i < data.length; i += 4 * step) {
+          const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
+          if (brightness < 128) darkSamples++;
+        }
+        const totalSampled = data.length / (4 * step);
+        const isDarkBackground = (darkSamples / totalSampled) > 0.4;
+
+        if (isDarkBackground) {
+          // Invert: black background (#000000) -> pure white (#FFFFFF), white lines -> crisp black (#000000)
+          for (let i = 0; i < data.length; i += 4) {
+            data[i] = 255 - data[i];         // r
+            data[i + 1] = 255 - data[i + 1]; // g
+            data[i + 2] = 255 - data[i + 2]; // b
+            data[i + 3] = 255;               // a
+          }
+        }
+
+        // 3. Put inverted ImageData onto active canvas & push to undo stack
+        ctx.putImageData(imgData, 0, 0);
+        saveHistoryState(canvas);
+      };
+      img.src = imageSrc;
     },
     validateSketch: () => {
       const canvas = canvasRef.current;

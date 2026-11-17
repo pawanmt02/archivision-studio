@@ -280,9 +280,11 @@ textarea.input-field {
   align-items: center;
   justify-content: center;
   background: var(--bg-primary);
-  overflow: auto;
+  overflow: hidden;
   position: relative;
-  padding: 20px;
+  padding: 24px;
+  width: 100%;
+  height: 100%;
 }
 .studio-right-panel {
   width: 320px;
@@ -328,17 +330,19 @@ textarea.input-field {
 /* Canvas Area */
 .canvas-container {
   position: relative;
-  border-radius: var(--radius-md);
   overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
   background: #ffffff; /* canvas background is white */
-  width: 512px;
-  height: 512px;
+  width: 100%;
+  height: 100%;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 1px rgba(255, 255, 255, 0.1);
 }
 .canvas-layer {
   position: absolute;
   top: 0;
   left: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
 }
 .canvas-layer.interactive {
@@ -579,7 +583,10 @@ textarea.input-field {
 /* Canvas wrapper positions the grid-toggle button */
 .canvas-wrapper {
   position: relative;
-  display: inline-block;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  flex: 1;
 }
 
 .grid-toggle-btn {
@@ -1446,5 +1453,52 @@ textarea.input-field {
 .sidebar-generate-btn:hover {
   transform: scale(1.08);
   box-shadow: 0 6px 20px rgba(99,198,210,0.55);
+}
+
+/* Fullscreen modal support & utilities */
+.fixed {
+  position: fixed !important;
+}
+.inset-0 {
+  top: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+}
+.z-\[9999\], .z-9999 {
+  z-index: 9999 !important;
+}
+.bg-\[\#0B1120\] {
+  background-color: #0B1120 !important;
+}
+.overflow-y-auto {
+  overflow-y: auto !important;
+}
+
+/* Compact Responsive Grid Helpers */
+.max-w-7xl {
+  max-width: 80rem !important;
+}
+.mx-auto {
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+.grid-cols-1 {
+  grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+}
+@media (min-width: 640px) {
+  .sm\:grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+@media (min-width: 768px) {
+  .md\:grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+@media (min-width: 1024px) {
+  .lg\:grid-cols-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
 }
 

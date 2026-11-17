@@ -42,6 +42,7 @@ const ShapeStagingOverlay = ({
   };
 
   const initial = getDefaultSize();
+  const overlayRef = useRef(null);
   const [box, setBox] = useState({
     x: (canvasWidth - initial.w) / 2,
     y: (canvasHeight - initial.h) / 2,
@@ -49,9 +50,24 @@ const ShapeStagingOverlay = ({
     h: initial.h,
   });
 
+  // Center bounding box accurately relative to the actual canvas container DOM element
+  useEffect(() => {
+    if (overlayRef.current?.parentElement) {
+      const parentRect = overlayRef.current.parentElement.getBoundingClientRect();
+      if (parentRect.width && parentRect.height) {
+        setBox({
+          x: Math.max(0, (parentRect.width - initial.w) / 2),
+          y: Math.max(0, (parentRect.height - initial.h) / 2),
+          w: initial.w,
+          h: initial.h,
+        });
+      }
+    }
+  }, []);
+
   const interactionRef = useRef(null); // { mode: 'drag'|'resize', startX, startY, startBox }
 
-  // Dragging and resizing interaction handlers
+  // Dragging and resizing interaction handlers locked to initial mousedown coordinates
   const handleMouseDown = (e, mode) => {
     e.stopPropagation();
     e.preventDefault();
@@ -70,13 +86,17 @@ const ShapeStagingOverlay = ({
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
 
+      const parentRect = overlayRef.current?.parentElement?.getBoundingClientRect();
+      const boundW = parentRect?.width || canvasWidth;
+      const boundH = parentRect?.height || canvasHeight;
+
       if (mode === 'drag') {
-        const nextX = Math.max(0, Math.min(canvasWidth - startBox.w, startBox.x + dx));
-        const nextY = Math.max(0, Math.min(canvasHeight - startBox.h, startBox.y + dy));
+        const nextX = Math.max(0, Math.min(boundW - startBox.w, startBox.x + dx));
+        const nextY = Math.max(0, Math.min(boundH - startBox.h, startBox.y + dy));
         setBox((prev) => ({ ...prev, x: nextX, y: nextY }));
       } else if (mode === 'resize') {
-        const nextW = Math.max(30, Math.min(canvasWidth - startBox.x, startBox.w + dx));
-        const nextH = Math.max(30, Math.min(canvasHeight - startBox.y, startBox.h + dy));
+        const nextW = Math.max(30, Math.min(boundW - startBox.x, startBox.w + dx));
+        const nextH = Math.max(30, Math.min(boundH - startBox.y, startBox.h + dy));
         setBox((prev) => ({ ...prev, w: nextW, h: nextH }));
       }
     };
@@ -176,6 +196,7 @@ const ShapeStagingOverlay = ({
 
   return (
     <div
+      ref={overlayRef}
       onDoubleClick={() => onConfirm(box)}
       style={{
         position: 'absolute',
@@ -192,58 +213,80 @@ const ShapeStagingOverlay = ({
         userSelect: 'none',
       }}
       onMouseDown={(e) => handleMouseDown(e, 'drag')}
-      title="Drag to position. Drag bottom-right corner to resize. Double-click or click Check to stamp."
+      title="Drag to position. Drag bottom-right corner to resize. Double-click or click Save to stamp."
     >
-      {/* Top Floating Controls */}
+      {/* Floating Action Menu Anchored Directly Above Shape Top-Left */}
       <div
+        className="absolute flex items-center gap-2 select-none"
         style={{
           position: 'absolute',
-          top: '-32px',
-          right: '0px',
+          top: box.y < 38 ? `${box.h + 8}px` : '-34px',
+          left: '0px',
           display: 'flex',
-          gap: '4px',
+          alignItems: 'center',
+          gap: '6px',
           zIndex: 60,
+          whiteSpace: 'nowrap',
+          pointerEvents: 'auto',
         }}
         onMouseDown={(e) => e.stopPropagation()}
       >
+        {/* Blue Action Button: "Save" */}
         <button
           type="button"
-          onClick={() => onConfirm(box)}
-          title="Confirm / Stamp Shape"
+          onClick={(e) => {
+            e.stopPropagation();
+            onConfirm(box);
+          }}
+          title="Save Shape to Canvas"
+          className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 shadow-md hover:shadow-blue-500/30 transition-all cursor-pointer border border-blue-400/40"
           style={{
-            width: '24px',
-            height: '24px',
-            borderRadius: '6px',
-            background: 'linear-gradient(135deg, #00f0ff, #00a8ff)',
-            border: 'none',
-            color: '#050b14',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            boxShadow: '0 0 8px rgba(0, 240, 255, 0.6)',
-          }}
-        >
-          <Check size={14} strokeWidth={3} />
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          title="Cancel Shape Placement"
-          style={{
-            width: '24px',
-            height: '24px',
+            gap: '5px',
+            padding: '4px 10px',
             borderRadius: '6px',
-            background: 'rgba(15, 23, 42, 0.9)',
-            border: '1px solid rgba(255, 255, 255, 0.2)',
+            backgroundColor: '#2563eb',
+            border: '1px solid rgba(96, 165, 250, 0.5)',
             color: '#ffffff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            fontSize: '11px',
+            fontWeight: '700',
+            letterSpacing: '0.3px',
             cursor: 'pointer',
+            boxShadow: '0 2px 8px rgba(37, 99, 235, 0.4)',
           }}
         >
-          <X size={14} strokeWidth={2.5} />
+          <Check size={12} strokeWidth={2.5} />
+          <span>Save</span>
+        </button>
+
+        {/* Black/Dark Action Button: "Delete" */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onCancel();
+          }}
+          title="Delete Shape"
+          className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold text-white bg-gray-900 hover:bg-black shadow-md hover:shadow-black/50 transition-all cursor-pointer border border-gray-700"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            padding: '4px 10px',
+            borderRadius: '6px',
+            backgroundColor: '#0f172a',
+            border: '1px solid #334155',
+            color: '#ffffff',
+            fontSize: '11px',
+            fontWeight: '700',
+            letterSpacing: '0.3px',
+            cursor: 'pointer',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.6)',
+          }}
+        >
+          <X size={12} strokeWidth={2.5} />
+          <span>Delete</span>
         </button>
       </div>
 

@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 
+const DEFAULT_NGROK_URL = 'https://overexert-suspense-unmanned.ngrok-free.dev/';
+
 const TunnelConfigModal = ({ isOpen, onClose, currentUrl, onSave, status }) => {
-  const [url, setUrl] = useState('');
+  const [url, setUrl] = useState(DEFAULT_NGROK_URL);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    setUrl(currentUrl || '');
+    setUrl(currentUrl || DEFAULT_NGROK_URL);
   }, [currentUrl, isOpen]);
 
   if (!isOpen) return null;
